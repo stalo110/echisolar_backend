@@ -12,6 +12,16 @@ export const getProjects = async (req: Request, res: Response) => {
   }
 };
 
+export const getAdminProjects = async (_req: Request, res: Response) => {
+  try {
+    const [rows] = await db.query('SELECT * FROM projects ORDER BY createdAt DESC');
+    res.json(rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+};
+
 export const getProjectById = async (req: Request, res: Response) => {
   try {
     const [rows] = await db.query('SELECT * FROM projects WHERE id = ?', [req.params.id]);

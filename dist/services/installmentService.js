@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.calculateInstallments = calculateInstallments;
+exports.calculateInstallments = void 0;
 function calculateInstallments(total, months) {
     const upfront = Number((total / months).toFixed(2));
     const restCount = months - 1;
@@ -23,3 +23,4 @@ function calculateInstallments(total, months) {
         schedule[schedule.length - 1].amount = Number((schedule[schedule.length - 1].amount + diff).toFixed(2));
     return schedule;
 }
+exports.calculateInstallments = calculateInstallments;

@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.deleteProject = exports.updateProject = exports.createProject = exports.getProjectById = exports.getProjects = void 0;
+exports.deleteProject = exports.updateProject = exports.createProject = exports.getProjectById = exports.getAdminProjects = exports.getProjects = void 0;
 const db_1 = require("../config/db");
 const cloudinary_1 = require("../utils/cloudinary");
 const guards_1 = require("../utils/guards");
@@ -14,6 +14,17 @@ const getProjects = async (req, res) => {
     }
 };
 exports.getProjects = getProjects;
+const getAdminProjects = async (_req, res) => {
+    try {
+        const [rows] = await db_1.db.query('SELECT * FROM projects ORDER BY createdAt DESC');
+        res.json(rows);
+    }
+    catch (err) {
+        console.error(err);
+        res.status(500).json({ error: 'Server error' });
+    }
+};
+exports.getAdminProjects = getAdminProjects;
 const getProjectById = async (req, res) => {
     try {
         const [rows] = await db_1.db.query('SELECT * FROM projects WHERE id = ?', [req.params.id]);

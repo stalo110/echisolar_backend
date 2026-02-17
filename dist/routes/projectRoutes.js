@@ -9,6 +9,7 @@ const authMiddleware_1 = require("../middlewares/authMiddleware");
 const upload_1 = __importDefault(require("../middlewares/upload"));
 const r = (0, express_1.Router)();
 r.get('/', projectsController_1.getProjects);
+r.get('/admin/all', authMiddleware_1.protect, authMiddleware_1.adminOnly, projectsController_1.getAdminProjects);
 r.get('/:id', projectsController_1.getProjectById);
 // accept multipart/form-data for images
 r.post('/', authMiddleware_1.protect, authMiddleware_1.adminOnly, upload_1.default.array('images', 6), projectsController_1.createProject);
