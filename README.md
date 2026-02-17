@@ -29,7 +29,7 @@ Express + TypeScript API for the EchiSolar React storefront. It manages MySQL da
 
 | Variable | Description |
 | --- | --- |
-| `PORT` | Server port (default `3360`). |
+| `PORT` | Server port (default `5000`). |
 | `NODE_ENV` | `development` or `production`. |
 | `DB_*` | MySQL connection details. |
 | `JWT_SECRET` | Secret used to sign access tokens. |

@@ -3,7 +3,8 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.testConnection = exports.db = void 0;
+exports.db = void 0;
+exports.testConnection = testConnection;
 const promise_1 = __importDefault(require("mysql2/promise"));
 const dotenv_1 = __importDefault(require("dotenv"));
 dotenv_1.default.config();
@@ -19,4 +20,3 @@ async function testConnection() {
     const conn = await exports.db.getConnection();
     conn.release();
 }
-exports.testConnection = testConnection;
