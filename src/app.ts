@@ -18,12 +18,15 @@ app.use(cors({ origin: process.env.FRONTEND_URL || true }));
 app.use(morgan('dev'));
 
 // capture the raw body for webhook signature verification
-app.use(express.json({
-  verify: (req: any, res, buf) => {
-    req.rawBody = buf.toString();
-  }
-}));
-app.use(express.urlencoded({ extended: true }));
+app.use(
+  express.json({
+    limit: '2mb',
+    verify: (req: any, _res, buf) => {
+      req.rawBody = buf.toString();
+    },
+  })
+);
+app.use(express.urlencoded({ extended: true, limit: '2mb' }));
 
 const limiter = rateLimit({ windowMs: 60 * 1000, max: 100 });
 app.use(limiter);
