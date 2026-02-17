@@ -1,0 +1,234 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.getOrderByPaymentReference = exports.getUserOrders = exports.getOrderById = exports.initiateCheckout = void 0;
+const db_1 = require("../config/db");
+const mailer_1 = require("../utils/mailer");
+const installmentService_1 = require("../services/installmentService");
+const paymentFactory_1 = require("../services/paymentFactory");
+const paymentLogger_1 = require("../utils/paymentLogger");
+const getOrderUserId = (req) => req.user.userId;
+const paymentDispatcher = (0, paymentFactory_1.createPaymentDispatcher)();
+const initiateCheckout = async (req, res) => {
+    const userId = getOrderUserId(req);
+    const { shippingAddressId, providerPreference = 'AUTO', planOption = 'full', currency = 'usd' } = req.body;
+    try {
+        const [cartRows] = await db_1.db.query('SELECT id FROM carts WHERE userId = ?', [userId]);
+        const cart = cartRows[0];
+        if (!cart)
+            return res.status(400).json({ error: 'Cart empty' });
+        const [items] = await db_1.db.query(`SELECT ci.id, ci.quantity, p.id as productId, p.name, COALESCE(p.salePrice,p.price) as unitPrice, p.stock
+       FROM cartItems ci JOIN products p ON p.id = ci.productId WHERE ci.cartId = ?`, [cart.id]);
+        const cartItems = items;
+        if (!cartItems.length)
+            return res.status(400).json({ error: 'Cart empty' });
+        for (const it of cartItems) {
+            if (it.quantity > it.stock)
+                return res.status(400).json({ error: `Not enough stock for ${it.name}` });
+        }
+        const subtotal = cartItems.reduce((s, it) => s + it.unitPrice * it.quantity, 0);
+        const shipping = 0;
+        const total = Number((subtotal + shipping).toFixed(2));
+        const [userRows] = await db_1.db.query('SELECT country, email FROM users WHERE id = ?', [userId]);
+        const user = userRows[0];
+        const userEmail = user?.email ?? '';
+        if (!userEmail)
+            return res.status(400).json({ error: 'User email is required for checkout' });
+        const [orderRes] = await db_1.db.query('INSERT INTO orders (userId, totalAmount, paymentStatus, status, shippingAddressId) VALUES (?,?,?,?,?)', [
+            userId,
+            total,
+            'pending',
+            'pending',
+            shippingAddressId || null,
+        ]);
+        const orderId = orderRes.insertId;
+        for (const it of cartItems) {
+            await db_1.db.query('INSERT INTO orderItems (orderId, productId, quantity, unitPrice) VALUES (?,?,?,?)', [orderId, it.productId, it.quantity, it.unitPrice]);
+            await db_1.db.query('UPDATE products SET stock = stock - ? WHERE id = ?', [it.quantity, it.productId]);
+        }
+        await db_1.db.query('DELETE FROM cartItems WHERE cartId = ?', [cart.id]);
+        const preference = String(providerPreference || 'AUTO').toLowerCase();
+        let provider = 'flutterwave';
+        if (preference === 'paystack') {
+            provider = 'paystack';
+        }
+        else if (preference === 'flutterwave') {
+            provider = 'flutterwave';
+        }
+        else if (user && (String(user.country).toLowerCase() === 'nigeria' || String(user.country).toLowerCase() === 'ng')) {
+            provider = 'paystack';
+        }
+        const normalizedCurrency = String(currency || 'usd').toUpperCase();
+        const itemsForEmail = cartItems.map((it) => ({
+            name: it.name,
+            quantity: it.quantity,
+            unitPrice: it.unitPrice,
+        }));
+        const sendOrderEmail = (checkoutUrl, amount, installments) => (0, mailer_1.notifyOrderStakeholders)({
+            orderId,
+            customerEmail: userEmail,
+            provider,
+            currency: normalizedCurrency,
+            total: amount,
+            checkoutUrl,
+            items: itemsForEmail,
+            installments,
+        });
+        if (planOption !== 'full') {
+            const months = Number(planOption);
+            const schedule = (0, installmentService_1.calculateInstallments)(total, months);
+            for (const s of schedule) {
+                await db_1.db.query('INSERT INTO installments (orderId, installmentNumber, dueDate, amount, status) VALUES (?,?,?,?,?)', [
+                    orderId,
+                    s.installmentNumber,
+                    s.dueDate,
+                    s.amount,
+                    'pending',
+                ]);
+            }
+            const first = schedule[0];
+            if (provider === 'flutterwave') {
+                const data = await paymentDispatcher.initiate({ id: orderId, userId, totalAmount: first.amount }, 'flutterwave', userEmail, normalizedCurrency, { installment: 1 });
+                await db_1.db.query('INSERT INTO payments (orderId, provider, paymentIntentId, amount, currency, status) VALUES (?,?,?,?,?,?)', [
+                    orderId,
+                    'flutterwave',
+                    data.reference,
+                    first.amount,
+                    normalizedCurrency,
+                    'pending',
+                ]);
+                await sendOrderEmail(data.link, first.amount, schedule);
+                return res.json({
+                    orderId,
+                    provider,
+                    authorization_url: data.link,
+                    tx_ref: data.reference,
+                    amount: first.amount,
+                    currency: normalizedCurrency,
+                });
+            }
+            else {
+                const data = await paymentDispatcher.initiate({ id: orderId, userId, totalAmount: first.amount }, 'paystack', userEmail, normalizedCurrency, { installment: 1 });
+                await db_1.db.query('INSERT INTO payments (orderId, provider, paymentIntentId, amount, currency, status) VALUES (?,?,?,?,?,?)', [
+                    orderId,
+                    'paystack',
+                    data.reference,
+                    first.amount,
+                    normalizedCurrency,
+                    'pending',
+                ]);
+                await sendOrderEmail(data.authorization_url, first.amount, schedule);
+                return res.json({
+                    orderId,
+                    provider,
+                    authorization_url: data.authorization_url,
+                    reference: data.reference,
+                    amount: first.amount,
+                    currency: normalizedCurrency,
+                });
+            }
+        }
+        else {
+            if (provider === 'flutterwave') {
+                const data = await paymentDispatcher.initiate({ id: orderId, userId, totalAmount: total }, 'flutterwave', userEmail, normalizedCurrency);
+                await db_1.db.query('INSERT INTO payments (orderId, provider, paymentIntentId, amount, currency, status) VALUES (?,?,?,?,?,?)', [
+                    orderId,
+                    'flutterwave',
+                    data.reference,
+                    total,
+                    normalizedCurrency,
+                    'pending',
+                ]);
+                await sendOrderEmail(data.link, total);
+                return res.json({
+                    orderId,
+                    provider,
+                    authorization_url: data.link,
+                    tx_ref: data.reference,
+                    amount: total,
+                    currency: normalizedCurrency,
+                });
+            }
+            else {
+                const data = await paymentDispatcher.initiate({ id: orderId, userId, totalAmount: total }, 'paystack', userEmail, normalizedCurrency);
+                await db_1.db.query('INSERT INTO payments (orderId, provider, paymentIntentId, amount, currency, status) VALUES (?,?,?,?,?,?)', [
+                    orderId,
+                    'paystack',
+                    data.reference,
+                    total,
+                    normalizedCurrency,
+                    'pending',
+                ]);
+                await sendOrderEmail(data.authorization_url, total);
+                return res.json({
+                    orderId,
+                    provider,
+                    authorization_url: data.authorization_url,
+                    reference: data.reference,
+                    amount: total,
+                    currency: normalizedCurrency,
+                });
+            }
+        }
+    }
+    catch (err) {
+        (0, paymentLogger_1.logPayment)('checkout.error', { error: err.message });
+        res.status(500).json({ error: err.message || 'Server error' });
+    }
+};
+exports.initiateCheckout = initiateCheckout;
+const getOrderById = async (req, res) => {
+    const userId = req.user.userId;
+    const id = Number(req.params.id);
+    try {
+        const [rows] = await db_1.db.query('SELECT * FROM orders WHERE id = ?', [id]);
+        const order = rows[0];
+        if (!order)
+            return res.status(404).json({ error: 'Not found' });
+        if (req.user.role !== 'admin' && order.userId !== userId)
+            return res.status(403).json({ error: 'Forbidden' });
+        const [items] = await db_1.db.query('SELECT oi.*, p.name, p.images FROM orderItems oi JOIN products p ON p.id = oi.productId WHERE oi.orderId = ?', [id]);
+        const [payments] = await db_1.db.query('SELECT * FROM payments WHERE orderId = ?', [id]);
+        const [installments] = await db_1.db.query('SELECT * FROM installments WHERE orderId = ?', [id]);
+        res.json({ order, items, payments, installments });
+    }
+    catch (err) {
+        res.status(500).json({ error: 'Server error' });
+    }
+};
+exports.getOrderById = getOrderById;
+const getUserOrders = async (req, res) => {
+    const userId = req.user.userId;
+    try {
+        const [orders] = await db_1.db.query('SELECT * FROM orders WHERE userId = ? ORDER BY placedAt DESC', [userId]);
+        res.json(orders);
+    }
+    catch {
+        res.status(500).json({ error: 'Server error' });
+    }
+};
+exports.getUserOrders = getUserOrders;
+const getOrderByPaymentReference = async (req, res) => {
+    const userId = req.user.userId;
+    const reference = String(req.query.reference || '').trim();
+    if (!reference)
+        return res.status(400).json({ error: 'Missing reference' });
+    try {
+        const [rows] = await db_1.db.query('SELECT o.id, o.userId FROM payments p JOIN orders o ON o.id = p.orderId WHERE p.paymentIntentId = ? LIMIT 1', [reference]);
+        const match = rows[0];
+        if (!match)
+            return res.status(404).json({ error: 'Not found' });
+        if (req.user.role !== 'admin' && match.userId !== userId)
+            return res.status(403).json({ error: 'Forbidden' });
+        const [orderRows] = await db_1.db.query('SELECT * FROM orders WHERE id = ?', [match.id]);
+        const order = orderRows[0];
+        const [items] = await db_1.db.query('SELECT oi.*, p.name, p.images FROM orderItems oi JOIN products p ON p.id = oi.productId WHERE oi.orderId = ?', [match.id]);
+        const [payments] = await db_1.db.query('SELECT * FROM payments WHERE orderId = ?', [match.id]);
+        const [installments] = await db_1.db.query('SELECT * FROM installments WHERE orderId = ?', [match.id]);
+        res.json({ order, items, payments, installments });
+    }
+    catch (err) {
+        console.error(err);
+        res.status(500).json({ error: 'Server error' });
+    }
+};
+exports.getOrderByPaymentReference = getOrderByPaymentReference;
