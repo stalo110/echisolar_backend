@@ -9,7 +9,10 @@ const authMiddleware_1 = require("../middlewares/authMiddleware");
 const upload_1 = __importDefault(require("../middlewares/upload"));
 const r = (0, express_1.Router)();
 r.get('/', productController_1.getProducts);
+r.get('/admin/all', authMiddleware_1.protect, authMiddleware_1.adminOnly, productController_1.getAdminProducts);
 r.get('/:id', productController_1.getProductById);
 // accept multipart/form-data with field name `images`
 r.post('/', authMiddleware_1.protect, authMiddleware_1.adminOnly, upload_1.default.array('images', 6), productController_1.createProduct);
+r.put('/:id', authMiddleware_1.protect, authMiddleware_1.adminOnly, upload_1.default.array('images', 6), productController_1.updateProduct);
+r.delete('/:id', authMiddleware_1.protect, authMiddleware_1.adminOnly, productController_1.deleteProduct);
 exports.default = r;
