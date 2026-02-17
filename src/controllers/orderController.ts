@@ -9,6 +9,10 @@ type AuthReq = Request & { user: { userId: number; role: string; email?: string 
 
 const getOrderUserId = (req: Request) => (req as AuthReq).user.userId;
 const paymentDispatcher = createPaymentDispatcher();
+const toAmount = (value: unknown) => {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+};
 
 export const initiateCheckout: RequestHandler = async (req, res) => {
   const userId = getOrderUserId(req);
@@ -30,7 +34,7 @@ export const initiateCheckout: RequestHandler = async (req, res) => {
       if (it.quantity > it.stock) return res.status(400).json({ error: `Not enough stock for ${it.name}` });
     }
 
-    const subtotal = cartItems.reduce((s, it) => s + it.unitPrice * it.quantity, 0);
+    const subtotal = cartItems.reduce((sum, it) => sum + toAmount(it.unitPrice) * toAmount(it.quantity), 0);
     const shipping = 0;
     const total = Number((subtotal + shipping).toFixed(2));
 
@@ -68,8 +72,8 @@ export const initiateCheckout: RequestHandler = async (req, res) => {
     const normalizedCurrency = String(currency || 'usd').toUpperCase();
     const itemsForEmail = cartItems.map((it) => ({
       name: it.name,
-      quantity: it.quantity,
-      unitPrice: it.unitPrice,
+      quantity: toAmount(it.quantity),
+      unitPrice: toAmount(it.unitPrice),
     }));
 
     const sendOrderEmail = (checkoutUrl: string, amount: number, installments?: Parameters<typeof notifyOrderStakeholders>[0]['installments']) =>

@@ -29,14 +29,19 @@ export interface OrderNotificationOptions {
   customerEmail: string;
   provider: string;
   currency: string;
-  total: number;
+  total: number | string;
   checkoutUrl: string;
-  items: { name: string; quantity: number; unitPrice: number }[];
-  installments?: { installmentNumber: number; amount: number; dueDate: string }[];
+  items: { name: string; quantity: number; unitPrice: number | string }[];
+  installments?: { installmentNumber: number; amount: number | string; dueDate: string }[];
 }
 
-const formatCurrency = (value: number, currency: string) =>
-  `${currency.toUpperCase()} ${value.toFixed(2)}`;
+const toSafeAmount = (value: unknown) => {
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? numeric : 0;
+};
+
+const formatCurrency = (value: number | string, currency: string) =>
+  `${currency.toUpperCase()} ${toSafeAmount(value).toFixed(2)}`;
 
 const buildItemsSection = (items: OrderNotificationOptions['items'], currency: string) =>
   items.map((it) => `${it.name} x${it.quantity} — ${formatCurrency(it.unitPrice, currency)}`).join('\n');
