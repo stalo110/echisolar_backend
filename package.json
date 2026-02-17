@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "ts-node-dev --respawn --transpile-only src/server.ts",
     "build": "tsc",
-    "start": "node dist/server.js"
+    "start": "node dist/server.js",
+    "migrate": "npm run build && node dist/scripts/migrate.js"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",
