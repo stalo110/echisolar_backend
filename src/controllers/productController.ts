@@ -32,6 +32,9 @@ const parseImages = (value: unknown): string[] => {
   }
 };
 
+const containsDataUrl = (images: string[]) =>
+  images.some((image) => /^data:image\//i.test(image.trim()));
+
 const getUploadedImageUrls = async (req: any) => {
   const uploadedUrls: string[] = [];
   if (!isMulterFileArray(req.files)) return uploadedUrls;
@@ -98,6 +101,11 @@ export const createProduct = async (req: any, res: Response) => {
     const { name, description, price, stock, categoryId, images: imagesBody, isLatestArrival } = req.body;
     const uploadedUrls = await getUploadedImageUrls(req);
     const imagesToStore = uploadedUrls.length ? uploadedUrls : parseImages(imagesBody);
+    if (containsDataUrl(imagesToStore)) {
+      return res.status(400).json({
+        error: 'Base64 image payloads are not supported. Upload files with multipart/form-data using field "images".',
+      });
+    }
 
     await db.query(
       `INSERT INTO products (name, description, price, stock, categoryId, images, isLatestArrival)
@@ -144,6 +152,11 @@ export const updateProduct = async (req: any, res: Response) => {
       : typeof imagesBody !== 'undefined'
       ? parseImages(imagesBody)
       : parseImages(existing.images);
+    if (containsDataUrl(imagesToStore)) {
+      return res.status(400).json({
+        error: 'Base64 image payloads are not supported. Upload files with multipart/form-data using field "images".',
+      });
+    }
 
     await db.query(
       `UPDATE products

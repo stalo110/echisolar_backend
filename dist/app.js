@@ -20,11 +20,12 @@ app.use((0, cors_1.default)({ origin: process.env.FRONTEND_URL || true }));
 app.use((0, morgan_1.default)('dev'));
 // capture the raw body for webhook signature verification
 app.use(express_1.default.json({
-    verify: (req, res, buf) => {
+    limit: '2mb',
+    verify: (req, _res, buf) => {
         req.rawBody = buf.toString();
-    }
+    },
 }));
-app.use(express_1.default.urlencoded({ extended: true }));
+app.use(express_1.default.urlencoded({ extended: true, limit: '2mb' }));
 const limiter = (0, express_rate_limit_1.default)({ windowMs: 60 * 1000, max: 100 });
 app.use(limiter);
 app.use('/api', routes_1.default);
