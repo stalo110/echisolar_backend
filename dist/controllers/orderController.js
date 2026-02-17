@@ -8,6 +8,10 @@ const paymentFactory_1 = require("../services/paymentFactory");
 const paymentLogger_1 = require("../utils/paymentLogger");
 const getOrderUserId = (req) => req.user.userId;
 const paymentDispatcher = (0, paymentFactory_1.createPaymentDispatcher)();
+const toAmount = (value) => {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : 0;
+};
 const initiateCheckout = async (req, res) => {
     const userId = getOrderUserId(req);
     const { shippingAddressId, providerPreference = 'AUTO', planOption = 'full', currency = 'usd' } = req.body;
@@ -25,7 +29,7 @@ const initiateCheckout = async (req, res) => {
             if (it.quantity > it.stock)
                 return res.status(400).json({ error: `Not enough stock for ${it.name}` });
         }
-        const subtotal = cartItems.reduce((s, it) => s + it.unitPrice * it.quantity, 0);
+        const subtotal = cartItems.reduce((sum, it) => sum + toAmount(it.unitPrice) * toAmount(it.quantity), 0);
         const shipping = 0;
         const total = Number((subtotal + shipping).toFixed(2));
         const [userRows] = await db_1.db.query('SELECT country, email FROM users WHERE id = ?', [userId]);
@@ -60,8 +64,8 @@ const initiateCheckout = async (req, res) => {
         const normalizedCurrency = String(currency || 'usd').toUpperCase();
         const itemsForEmail = cartItems.map((it) => ({
             name: it.name,
-            quantity: it.quantity,
-            unitPrice: it.unitPrice,
+            quantity: toAmount(it.quantity),
+            unitPrice: toAmount(it.unitPrice),
         }));
         const sendOrderEmail = (checkoutUrl, amount, installments) => (0, mailer_1.notifyOrderStakeholders)({
             orderId,

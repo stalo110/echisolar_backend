@@ -25,7 +25,11 @@ const transporter = nodemailer_1.default.createTransport({
         pass: SMTP_PASS,
     },
 });
-const formatCurrency = (value, currency) => `${currency.toUpperCase()} ${value.toFixed(2)}`;
+const toSafeAmount = (value) => {
+    const numeric = Number(value);
+    return Number.isFinite(numeric) ? numeric : 0;
+};
+const formatCurrency = (value, currency) => `${currency.toUpperCase()} ${toSafeAmount(value).toFixed(2)}`;
 const buildItemsSection = (items, currency) => items.map((it) => `${it.name} x${it.quantity} — ${formatCurrency(it.unitPrice, currency)}`).join('\n');
 const buildInstallmentSection = (installments, currency) => {
     if (!installments?.length)
