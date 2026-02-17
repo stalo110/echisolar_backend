@@ -2,3 +2,11 @@
 {"timestamp":"2026-02-12T13:18:52.342Z","event":"paystack.initialize.success","reference":"PAY-42-1770902332332","authorization_url":"https://paystack.test/redirect"}
 {"timestamp":"2026-02-12T13:18:52.346Z","event":"flutterwave.initialize.request","orderId":77,"reference":"FLW-77-1770902332346","payload":{"tx_ref":"FLW-77-1770902332346","amount":"1500.00","currency":"NGN","redirect_url":"https://echisolar.com/verify-payment?gateway=flutterwave","customer":{"email":"test@example.com"},"meta":{"order_id":77}}}
 {"timestamp":"2026-02-12T13:18:52.346Z","event":"flutterwave.initialize.success","reference":"FLW-77-1770902332346","link":"https://flutterwave.test/redirect"}
+{"timestamp":"2026-02-17T20:24:48.889Z","event":"initiate.start","orderId":1,"gateway":"flutterwave","email":"stanleyoffor11@gmail.com"}
+{"timestamp":"2026-02-17T20:24:48.895Z","event":"flutterwave.initialize.request","orderId":1,"reference":"FLW-1-1771359888893","payload":{"tx_ref":"FLW-1-1771359888893","amount":"20000.00","currency":"NGN","redirect_url":"https://echisolar.com/verify-payment?gateway=flutterwave","customer":{"email":"stanleyoffor11@gmail.com"},"meta":{"order_id":1}}}
+{"timestamp":"2026-02-17T20:24:49.249Z","event":"flutterwave.initialize.success","reference":"FLW-1-1771359888893","link":"https://checkout-v2.dev-flutterwave.com/v3/hosted/pay/a91bb584c1beb6b6b73b"}
+{"timestamp":"2026-02-17T20:24:49.268Z","event":"checkout.error","error":"value.toFixed is not a function"}
+{"timestamp":"2026-02-17T20:29:04.556Z","event":"initiate.start","orderId":2,"gateway":"flutterwave","email":"stanleyoffor11@gmail.com"}
+{"timestamp":"2026-02-17T20:29:04.558Z","event":"flutterwave.initialize.request","orderId":2,"reference":"FLW-2-1771360144556","payload":{"tx_ref":"FLW-2-1771360144556","amount":"10000.00","currency":"NGN","redirect_url":"https://echisolar.com/verify-payment?gateway=flutterwave","customer":{"email":"stanleyoffor11@gmail.com"},"meta":{"order_id":2,"installment":1}}}
+{"timestamp":"2026-02-17T20:29:04.942Z","event":"flutterwave.initialize.success","reference":"FLW-2-1771360144556","link":"https://checkout-v2.dev-flutterwave.com/v3/hosted/pay/60bb935091efc7158584"}
+{"timestamp":"2026-02-17T20:29:04.945Z","event":"checkout.error","error":"value.toFixed is not a function"}
