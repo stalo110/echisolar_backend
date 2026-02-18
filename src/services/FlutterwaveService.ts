@@ -3,6 +3,7 @@ import { fetchWithTimeout } from '../utils/http';
 import TransactionRepository, { TransactionGateway } from './TransactionRepository';
 import { db } from '../config/db';
 import { logPayment } from '../utils/paymentLogger';
+import { sendPaymentSuccessNotificationsByOrder } from '../utils/mailer';
 
 export type OrderLike = { id: number; userId: number; totalAmount: number };
 export type FlutterwaveInitializeOptions = { paymentPlanId?: string; redirectUrl?: string };
@@ -203,6 +204,13 @@ class FlutterwaveService {
       if (isSuccessful) {
         await db.query('UPDATE orders SET paymentStatus = ?, status = ? WHERE id = ?', ['paid', 'processing', transaction.order_id]);
         await db.query('UPDATE payments SET status = ? WHERE paymentIntentId = ?', ['success', transaction.reference]);
+        await sendPaymentSuccessNotificationsByOrder({
+          orderId: transaction.order_id,
+          provider: 'flutterwave',
+          reference: transaction.reference,
+          amount: paidAmount,
+          currency: String(transaction.currency || 'NGN'),
+        });
       }
 
       logPayment('flutterwave.verify.success', { reference: txRef, verification_identifier: identifier, isSuccessful });

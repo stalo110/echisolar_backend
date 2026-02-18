@@ -7,6 +7,7 @@ const crypto_1 = __importDefault(require("crypto"));
 const http_1 = require("../utils/http");
 const db_1 = require("../config/db");
 const paymentLogger_1 = require("../utils/paymentLogger");
+const mailer_1 = require("../utils/mailer");
 class FlutterwaveService {
     constructor(transactions, request = http_1.fetchWithTimeout) {
         this.transactions = transactions;
@@ -167,6 +168,13 @@ class FlutterwaveService {
             if (isSuccessful) {
                 await db_1.db.query('UPDATE orders SET paymentStatus = ?, status = ? WHERE id = ?', ['paid', 'processing', transaction.order_id]);
                 await db_1.db.query('UPDATE payments SET status = ? WHERE paymentIntentId = ?', ['success', transaction.reference]);
+                await (0, mailer_1.sendPaymentSuccessNotificationsByOrder)({
+                    orderId: transaction.order_id,
+                    provider: 'flutterwave',
+                    reference: transaction.reference,
+                    amount: paidAmount,
+                    currency: String(transaction.currency || 'NGN'),
+                });
             }
             (0, paymentLogger_1.logPayment)('flutterwave.verify.success', { reference: txRef, verification_identifier: identifier, isSuccessful });
             return { success: isSuccessful, data: json.data };

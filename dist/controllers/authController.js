@@ -7,6 +7,7 @@ exports.login = exports.register = void 0;
 const bcryptjs_1 = __importDefault(require("bcryptjs"));
 const db_1 = require("../config/db");
 const jwt_1 = require("../utils/jwt");
+const mailer_1 = require("../utils/mailer");
 const register = async (req, res) => {
     const { name, email, password, country } = req.body;
     try {
@@ -22,6 +23,7 @@ const register = async (req, res) => {
         ]);
         const userId = result.insertId;
         const token = (0, jwt_1.generateToken)(userId, 'user');
+        void (0, mailer_1.sendWelcomeEmail)({ name, email });
         res.status(201).json({
             token,
             user: {
