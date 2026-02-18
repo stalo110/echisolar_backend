@@ -16,3 +16,4 @@ r.post('/', authMiddleware_1.protect, authMiddleware_1.adminOnly, upload_1.defau
 r.put('/:id', authMiddleware_1.protect, authMiddleware_1.adminOnly, upload_1.default.array('images', 6), projectsController_1.updateProject);
 r.delete('/:id', authMiddleware_1.protect, authMiddleware_1.adminOnly, projectsController_1.deleteProject);
 exports.default = r;
+//# sourceMappingURL=projectRoutes.js.map

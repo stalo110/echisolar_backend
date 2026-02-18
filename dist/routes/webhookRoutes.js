@@ -6,3 +6,4 @@ const r = (0, express_1.Router)();
 r.post('/paystack', paymentWebhookController_1.paystackWebhook);
 r.post('/flutterwave', paymentWebhookController_1.flutterwaveWebhook);
 exports.default = r;
+//# sourceMappingURL=webhookRoutes.js.map

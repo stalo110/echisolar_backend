@@ -64,3 +64,4 @@ function verifyFlutterwaveSignature(_rawBody, signature) {
         return false;
     return signature === FLUTTERWAVE_SECRET_HASH;
 }
+//# sourceMappingURL=flutterwave.js.map

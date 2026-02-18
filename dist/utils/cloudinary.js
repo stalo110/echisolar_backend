@@ -64,3 +64,4 @@ const storage = new multer_storage_cloudinary_1.CloudinaryStorage({
     }),
 });
 exports.uploadImages = (0, multer_1.default)({ storage });
+//# sourceMappingURL=cloudinary.js.map

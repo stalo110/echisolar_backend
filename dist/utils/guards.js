@@ -6,3 +6,4 @@ function isMulterFileArray(obj) {
         return f && typeof f === 'object' && Buffer.isBuffer(f.buffer);
     });
 }
+//# sourceMappingURL=guards.js.map

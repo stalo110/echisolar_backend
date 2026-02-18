@@ -37,3 +37,4 @@ async function verifyPaystackTransaction(reference) {
         throw new Error(json.message || 'Paystack verify failed');
     return json.data;
 }
+//# sourceMappingURL=paystack.js.map

@@ -6,9 +6,19 @@
     "rootDir": "src",
     "strict": true,
     "esModuleInterop": true,
+    "moduleResolution": "node",
+    "types": ["node"],
+    "sourceMap": true,
+    "noEmitOnError": true,
     "skipLibCheck": true,
     "resolveJsonModule": true,
     "forceConsistentCasingInFileNames": true
   },
-  "include": ["src"]
+  "include": ["src"],
+  "exclude": [
+    "dist",
+    "node_modules",
+    "src/tests/**/*",
+    "**/*.test.ts"
+  ]
 }

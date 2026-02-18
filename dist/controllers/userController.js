@@ -15,3 +15,4 @@ const updateProfile = async (req, res) => {
     res.json({ message: 'Updated' });
 };
 exports.updateProfile = updateProfile;
+//# sourceMappingURL=userController.js.map

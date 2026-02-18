@@ -34,3 +34,4 @@ app.get('/verify-payment', paymentController_1.verifyPayment);
 app.get('/health', (req, res) => res.json({ ok: true }));
 app.use(errorHandler_1.errorHandler);
 exports.default = app;
+//# sourceMappingURL=app.js.map

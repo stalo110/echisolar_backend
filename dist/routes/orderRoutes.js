@@ -9,3 +9,4 @@ r.get('/', authMiddleware_1.protect, orderController_1.getUserOrders);
 r.get('/lookup', authMiddleware_1.protect, orderController_1.getOrderByPaymentReference);
 r.get('/:id', authMiddleware_1.protect, orderController_1.getOrderById);
 exports.default = r;
+//# sourceMappingURL=orderRoutes.js.map

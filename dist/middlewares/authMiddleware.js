@@ -26,3 +26,4 @@ const adminOnly = (req, res, next) => {
     next();
 };
 exports.adminOnly = adminOnly;
+//# sourceMappingURL=authMiddleware.js.map

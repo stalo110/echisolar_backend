@@ -44,3 +44,4 @@ function logWebhook(event, payload) {
     const maskedPayload = maskSensitive(payload);
     writeLog(webhooksLog, { event, ...maskedPayload });
 }
+//# sourceMappingURL=paymentLogger.js.map

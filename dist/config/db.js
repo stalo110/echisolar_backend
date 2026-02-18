@@ -20,3 +20,4 @@ async function testConnection() {
     const conn = await exports.db.getConnection();
     conn.release();
 }
+//# sourceMappingURL=db.js.map
