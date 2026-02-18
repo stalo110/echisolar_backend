@@ -1,0 +1,22 @@
+CREATE TABLE IF NOT EXISTS gatewaySubscriptions (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  orderId INT NOT NULL,
+  userId INT NOT NULL,
+  provider ENUM('paystack','flutterwave') NOT NULL,
+  planReference VARCHAR(255) DEFAULT NULL,
+  subscriptionReference VARCHAR(255) DEFAULT NULL,
+  customerEmail VARCHAR(255) DEFAULT NULL,
+  customerReference VARCHAR(255) DEFAULT NULL,
+  status ENUM('active','inactive','cancelled','failed') NOT NULL DEFAULT 'active',
+  metadata JSON DEFAULT NULL,
+  createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updatedAt DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  KEY gateway_subscriptions_order_idx (orderId),
+  KEY gateway_subscriptions_user_idx (userId),
+  KEY gateway_subscriptions_provider_plan_idx (provider, planReference),
+  KEY gateway_subscriptions_provider_sub_idx (provider, subscriptionReference),
+  KEY gateway_subscriptions_provider_email_idx (provider, customerEmail),
+  UNIQUE KEY gateway_subscriptions_provider_subscription_unique (provider, subscriptionReference),
+  CONSTRAINT gateway_subscriptions_order_fk FOREIGN KEY (orderId) REFERENCES orders(id) ON DELETE CASCADE,
+  CONSTRAINT gateway_subscriptions_user_fk FOREIGN KEY (userId) REFERENCES users(id) ON DELETE CASCADE
+);

@@ -6,13 +6,44 @@ class PaymentDispatcher {
         this.paystackService = paystackService;
         this.flutterwaveService = flutterwaveService;
     }
-    async initiate(order, gateway, email, currency, metadata = {}) {
+    async initiate(order, gateway, email, currency, metadata = {}, options = {}) {
         (0, paymentLogger_1.logPayment)('initiate.start', { orderId: order.id, gateway, email });
         switch (gateway) {
             case 'paystack':
-                return this.paystackService.initialize(order, email, currency, metadata);
+                return this.paystackService.initialize(order, email, currency, metadata, {
+                    planCode: options.planCode,
+                });
             case 'flutterwave':
-                return this.flutterwaveService.initialize(order, email, currency, metadata);
+                return this.flutterwaveService.initialize(order, email, currency, metadata, {
+                    paymentPlanId: options.paymentPlanId,
+                });
+            default:
+                throw new Error(`Unsupported gateway: ${gateway}`);
+        }
+    }
+    async createRecurringPlan(gateway, input) {
+        (0, paymentLogger_1.logPayment)('plan.create.start', { gateway, input });
+        switch (gateway) {
+            case 'paystack': {
+                const data = await this.paystackService.createPlan({
+                    name: input.name,
+                    amount: input.amount,
+                    interval: input.interval === 'yearly' ? 'annually' : input.interval,
+                    currency: input.currency,
+                    invoiceLimit: input.invoiceLimit,
+                });
+                return { planCode: data.planCode, raw: data.raw };
+            }
+            case 'flutterwave': {
+                const data = await this.flutterwaveService.createPaymentPlan({
+                    name: input.name,
+                    amount: input.amount,
+                    interval: input.interval === 'annually' ? 'yearly' : input.interval,
+                    currency: input.currency,
+                    duration: input.duration,
+                });
+                return { paymentPlanId: data.id, raw: data.raw };
+            }
             default:
                 throw new Error(`Unsupported gateway: ${gateway}`);
         }

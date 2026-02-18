@@ -5,6 +5,14 @@ import { db } from '../config/db';
 import { logPayment } from '../utils/paymentLogger';
 
 export type OrderLike = { id: number; userId: number; totalAmount: number };
+export type PaystackInitializeOptions = { planCode?: string };
+export type CreatePaystackPlanInput = {
+  name: string;
+  amount: number;
+  interval: 'daily' | 'weekly' | 'monthly' | 'annually';
+  currency?: string;
+  invoiceLimit?: number;
+};
 
 class PaystackService {
   private baseUrl = 'https://api.paystack.co';
@@ -12,7 +20,13 @@ class PaystackService {
 
   constructor(private transactions: TransactionRepository, private request = fetchWithTimeout) {}
 
-  async initialize(order: OrderLike, email: string, currency: string, metadata: Record<string, any> = {}) {
+  async initialize(
+    order: OrderLike,
+    email: string,
+    currency: string,
+    metadata: Record<string, any> = {},
+    options: PaystackInitializeOptions = {}
+  ) {
     if (!this.secretKey) throw new Error('Missing Paystack secret key');
 
     let reference = `PAY-${order.id}-${Date.now()}`;
@@ -23,9 +37,11 @@ class PaystackService {
     const payload = {
       email,
       amount: Math.round(order.totalAmount * 100),
+      currency: String(currency || 'NGN').toUpperCase(),
       reference,
       callback_url: `${process.env.APP_URL || process.env.FRONTEND_URL || ''}/verify-payment?gateway=paystack`,
       metadata: { order_id: order.id, ...metadata },
+      ...(options.planCode ? { plan: options.planCode } : {}),
     };
 
     logPayment('paystack.initialize.request', { orderId: order.id, reference, payload });
@@ -74,6 +90,46 @@ class PaystackService {
       logPayment('paystack.initialize.error', { reference, error: err.message });
       throw err;
     }
+  }
+
+  async createPlan(input: CreatePaystackPlanInput) {
+    if (!this.secretKey) throw new Error('Missing Paystack secret key');
+
+    const payload = {
+      name: input.name,
+      amount: Math.round(Number(input.amount) * 100),
+      interval: input.interval,
+      currency: String(input.currency || 'NGN').toUpperCase(),
+      ...(input.invoiceLimit ? { invoice_limit: input.invoiceLimit } : {}),
+    };
+
+    logPayment('paystack.plan.create.request', { payload });
+
+    const res = await this.request(`${this.baseUrl}/plan`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${this.secretKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload),
+    });
+
+    const json = await res.json();
+    if (!json.status || !json.data?.plan_code) {
+      logPayment('paystack.plan.create.failed', { response: json });
+      throw new Error(json.message || 'Unable to create Paystack plan');
+    }
+
+    logPayment('paystack.plan.create.success', {
+      plan_code: json.data.plan_code,
+      id: json.data.id,
+    });
+
+    return {
+      planCode: json.data.plan_code as string,
+      id: Number(json.data.id),
+      raw: json.data,
+    };
   }
 
   async verify(reference: string) {

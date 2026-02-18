@@ -5,15 +5,210 @@ const paymentFactory_1 = require("../services/paymentFactory");
 const paymentLogger_1 = require("../utils/paymentLogger");
 const db_1 = require("../config/db");
 const { transactions, paystack, flutterwave } = (0, paymentFactory_1.createPaymentServices)();
+const updateOrderPaymentState = async (orderId) => {
+    const [rows] = await db_1.db.query(`SELECT
+      COUNT(*) AS total,
+      SUM(CASE WHEN status = 'paid' THEN 1 ELSE 0 END) AS paidCount
+     FROM installments
+     WHERE orderId = ?`, [orderId]);
+    const aggregate = rows[0];
+    const total = Number(aggregate?.total || 0);
+    const paidCount = Number(aggregate?.paidCount || 0);
+    if (total === 0) {
+        await db_1.db.query('UPDATE orders SET paymentStatus = ?, status = ? WHERE id = ?', [
+            'paid',
+            'processing',
+            orderId,
+        ]);
+        return;
+    }
+    const paymentStatus = paidCount >= total ? 'paid' : paidCount > 0 ? 'partial' : 'pending';
+    await db_1.db.query('UPDATE orders SET paymentStatus = ?, status = ? WHERE id = ?', [
+        paymentStatus,
+        'processing',
+        orderId,
+    ]);
+};
+const markInstallmentPaid = async (orderId, installmentNumber) => {
+    if (installmentNumber) {
+        await db_1.db.query('UPDATE installments SET status = ?, paidAt = NOW() WHERE orderId = ? AND installmentNumber = ?', ['paid', orderId, installmentNumber]);
+        return installmentNumber;
+    }
+    const [pendingRows] = await db_1.db.query('SELECT installmentNumber FROM installments WHERE orderId = ? AND status = ? ORDER BY installmentNumber ASC LIMIT 1', [orderId, 'pending']);
+    const pending = pendingRows[0];
+    if (!pending)
+        return null;
+    await db_1.db.query('UPDATE installments SET status = ?, paidAt = NOW() WHERE orderId = ? AND installmentNumber = ?', ['paid', orderId, Number(pending.installmentNumber)]);
+    return Number(pending.installmentNumber);
+};
+const upsertPaymentByReference = async (params) => {
+    const [rows] = await db_1.db.query('SELECT id FROM payments WHERE paymentIntentId = ? LIMIT 1', [
+        params.reference,
+    ]);
+    const existing = rows[0];
+    if (existing) {
+        await db_1.db.query('UPDATE payments SET status = ? WHERE id = ?', ['success', existing.id]);
+        return;
+    }
+    await db_1.db.query('INSERT INTO payments (orderId, provider, paymentIntentId, amount, currency, status) VALUES (?,?,?,?,?,?)', [
+        params.orderId,
+        params.provider,
+        params.reference,
+        params.amount,
+        params.currency,
+        'success',
+    ]);
+};
+const asString = (value) => {
+    const text = String(value ?? '').trim();
+    return text.length ? text : undefined;
+};
+const asPositiveNumber = (value) => {
+    const parsed = Number(value);
+    if (!Number.isFinite(parsed) || parsed <= 0)
+        return undefined;
+    return parsed;
+};
+const getPaystackInfo = (data) => ({
+    orderId: asPositiveNumber(data?.metadata?.order_id),
+    installment: asPositiveNumber(data?.metadata?.installment),
+    amount: Number(data?.amount || 0) / 100,
+    currency: String(data?.currency || 'NGN').toUpperCase(),
+    planReference: asString(data?.plan?.plan_code ||
+        data?.plan_code ||
+        data?.metadata?.subscription_plan_code ||
+        data?.metadata?.subscription_plan_id ||
+        data?.plan?.id),
+    subscriptionReference: asString(data?.subscription?.subscription_code || data?.subscription_code || data?.metadata?.subscription_code),
+    customerEmail: asString(data?.customer?.email || data?.metadata?.customer_email),
+    customerReference: asString(data?.customer?.customer_code || data?.customer?.id),
+});
+const getFlutterwaveInfo = (data) => ({
+    orderId: asPositiveNumber(data?.meta?.order_id),
+    installment: asPositiveNumber(data?.meta?.installment),
+    amount: Number(data?.amount || 0),
+    currency: String(data?.currency || 'NGN').toUpperCase(),
+    planReference: asString(data?.payment_plan ||
+        data?.payment_plan_id ||
+        data?.meta?.subscription_plan_id ||
+        data?.meta?.subscription_plan_code),
+    subscriptionReference: asString(data?.subscription_id || data?.meta?.subscription_id || data?.subscription?.id),
+    customerEmail: asString(data?.customer?.email || data?.meta?.customer_email),
+    customerReference: asString(data?.customer?.id || data?.customer?.customer_code || data?.customer?.customer_id),
+});
+const upsertGatewaySubscriptionMapping = async (params) => {
+    const planReference = asString(params.planReference);
+    const subscriptionReference = asString(params.subscriptionReference);
+    if (!planReference && !subscriptionReference)
+        return;
+    let row = null;
+    if (subscriptionReference) {
+        const [rows] = await db_1.db.query('SELECT id FROM gatewaySubscriptions WHERE provider = ? AND subscriptionReference = ? LIMIT 1', [params.provider, subscriptionReference]);
+        row = rows[0] || null;
+    }
+    if (!row && planReference && params.orderId) {
+        const [rows] = await db_1.db.query('SELECT id FROM gatewaySubscriptions WHERE provider = ? AND orderId = ? AND planReference = ? LIMIT 1', [params.provider, params.orderId, planReference]);
+        row = rows[0] || null;
+    }
+    if (!row && planReference && params.customerEmail) {
+        const [rows] = await db_1.db.query('SELECT id FROM gatewaySubscriptions WHERE provider = ? AND planReference = ? AND customerEmail = ? ORDER BY id DESC LIMIT 1', [params.provider, planReference, params.customerEmail]);
+        row = rows[0] || null;
+    }
+    const metadataJson = params.metadata ? JSON.stringify(params.metadata) : null;
+    if (row) {
+        await db_1.db.query(`UPDATE gatewaySubscriptions
+       SET
+         orderId = COALESCE(?, orderId),
+         userId = COALESCE(?, userId),
+         planReference = COALESCE(?, planReference),
+         subscriptionReference = COALESCE(?, subscriptionReference),
+         customerEmail = COALESCE(?, customerEmail),
+         customerReference = COALESCE(?, customerReference),
+         status = ?,
+         metadata = COALESCE(?, metadata)
+       WHERE id = ?`, [
+            params.orderId ?? null,
+            params.userId ?? null,
+            planReference ?? null,
+            subscriptionReference ?? null,
+            params.customerEmail ?? null,
+            params.customerReference ?? null,
+            params.status || 'active',
+            metadataJson,
+            row.id,
+        ]);
+        return;
+    }
+    if (!params.orderId || !params.userId)
+        return;
+    await db_1.db.query(`INSERT INTO gatewaySubscriptions
+      (orderId, userId, provider, planReference, subscriptionReference, customerEmail, customerReference, status, metadata)
+     VALUES (?,?,?,?,?,?,?,?,?)`, [
+        params.orderId,
+        params.userId,
+        params.provider,
+        planReference ?? null,
+        subscriptionReference ?? null,
+        params.customerEmail ?? null,
+        params.customerReference ?? null,
+        params.status || 'active',
+        metadataJson,
+    ]);
+};
+const resolveMappedOrder = async (provider, info) => {
+    if (info.subscriptionReference) {
+        const [rows] = await db_1.db.query(`SELECT orderId, userId
+       FROM gatewaySubscriptions
+       WHERE provider = ? AND subscriptionReference = ?
+       ORDER BY id DESC LIMIT 1`, [provider, info.subscriptionReference]);
+        const row = rows[0];
+        if (row)
+            return { orderId: Number(row.orderId), userId: Number(row.userId) };
+    }
+    if (info.planReference && info.customerEmail) {
+        const [rows] = await db_1.db.query(`SELECT orderId, userId
+       FROM gatewaySubscriptions
+       WHERE provider = ? AND planReference = ? AND customerEmail = ?
+       ORDER BY id DESC LIMIT 1`, [provider, info.planReference, info.customerEmail]);
+        const row = rows[0];
+        if (row)
+            return { orderId: Number(row.orderId), userId: Number(row.userId) };
+    }
+    if (info.planReference) {
+        const [rows] = await db_1.db.query(`SELECT orderId, userId
+       FROM gatewaySubscriptions
+       WHERE provider = ? AND planReference = ?
+       ORDER BY id DESC LIMIT 1`, [provider, info.planReference]);
+        const row = rows[0];
+        if (row)
+            return { orderId: Number(row.orderId), userId: Number(row.userId) };
+    }
+    if (info.customerEmail) {
+        const [rows] = await db_1.db.query(`SELECT gs.orderId, gs.userId
+       FROM gatewaySubscriptions gs
+       JOIN installments i ON i.orderId = gs.orderId AND i.status = 'pending'
+       WHERE gs.provider = ? AND gs.customerEmail = ?
+       ORDER BY gs.id DESC LIMIT 1`, [provider, info.customerEmail]);
+        const row = rows[0];
+        if (row)
+            return { orderId: Number(row.orderId), userId: Number(row.userId) };
+    }
+    return null;
+};
 const flutterwaveWebhook = async (req, res) => {
-    const signature = req.headers['verif-hash'];
+    const legacySignature = req.headers['verif-hash'];
+    const hmacSignature = req.headers['flutterwave-signature'];
+    const rawBody = req.rawBody;
     const payload = req.body;
     (0, paymentLogger_1.logWebhook)('flutterwave.webhook.received', {
         headers: req.headers,
         payload,
     });
-    if (!flutterwave.validateWebhookSignature(signature)) {
-        (0, paymentLogger_1.logWebhook)('flutterwave.webhook.invalid_signature', { signature_present: !!signature });
+    if (!flutterwave.validateWebhookSignature(rawBody, legacySignature, hmacSignature)) {
+        (0, paymentLogger_1.logWebhook)('flutterwave.webhook.invalid_signature', {
+            legacy_signature_present: !!legacySignature,
+            hmac_signature_present: !!hmacSignature,
+        });
         return res.status(401).json({ ok: false, message: 'Invalid signature' });
     }
     try {
@@ -28,37 +223,108 @@ const flutterwaveWebhook = async (req, res) => {
         if (!reference)
             return res.status(200).json({ ok: true });
         const existing = await transactions.findByReference(reference);
-        if (!existing)
-            return res.status(200).json({ ok: true });
-        if (existing.status === 'success')
-            return res.status(200).json({ ok: true });
-        if (Number(data.amount) !== Number(existing.amount)) {
-            (0, paymentLogger_1.logWebhook)('flutterwave.webhook.amount_mismatch', {
+        const info = getFlutterwaveInfo(data);
+        if (existing) {
+            if (existing.status === 'success')
+                return res.status(200).json({ ok: true });
+            if (info.amount !== Number(existing.amount)) {
+                (0, paymentLogger_1.logWebhook)('flutterwave.webhook.amount_mismatch', {
+                    reference,
+                    expected: existing.amount,
+                    received: data.amount,
+                });
+                return res.status(200).json({ ok: true });
+            }
+            await transactions.updateStatus(reference, 'success', {
+                ...existing.metadata,
+                webhook_payload: data,
+            });
+            await upsertPaymentByReference({
+                orderId: existing.order_id,
+                provider: 'flutterwave',
                 reference,
-                expected: existing.amount,
-                received: data.amount,
+                amount: info.amount,
+                currency: info.currency,
+            });
+            await markInstallmentPaid(existing.order_id, Number(info.installment || existing.metadata?.metadata?.installment || 0) || undefined);
+            await updateOrderPaymentState(existing.order_id);
+            await upsertGatewaySubscriptionMapping({
+                provider: 'flutterwave',
+                orderId: existing.order_id,
+                userId: existing.user_id,
+                planReference: info.planReference,
+                subscriptionReference: info.subscriptionReference,
+                customerEmail: info.customerEmail,
+                customerReference: info.customerReference,
+                metadata: { source: 'known_transaction', webhook_payload: data },
+            });
+            (0, paymentLogger_1.logWebhook)('flutterwave.webhook.processed', { reference, source: 'known_transaction' });
+            return res.status(200).json({ ok: true });
+        }
+        const mapped = await resolveMappedOrder('flutterwave', info);
+        const candidateOrderId = info.orderId || mapped?.orderId;
+        if (!candidateOrderId)
+            return res.status(200).json({ ok: true });
+        const [orderRows] = await db_1.db.query('SELECT id, userId FROM orders WHERE id = ? LIMIT 1', [candidateOrderId]);
+        const order = orderRows[0];
+        if (!order)
+            return res.status(200).json({ ok: true });
+        const [pendingRows] = await db_1.db.query('SELECT installmentNumber, amount FROM installments WHERE orderId = ? AND status = ? ORDER BY installmentNumber ASC LIMIT 1', [order.id, 'pending']);
+        const pending = pendingRows[0];
+        if (!pending)
+            return res.status(200).json({ ok: true });
+        if (Number(pending.amount) !== info.amount) {
+            (0, paymentLogger_1.logWebhook)('flutterwave.webhook.pending_installment_amount_mismatch', {
+                reference,
+                orderId: order.id,
+                expected: pending.amount,
+                received: info.amount,
             });
             return res.status(200).json({ ok: true });
         }
-        await transactions.updateStatus(reference, 'success', {
-            ...existing.metadata,
-            webhook_payload: data,
-        });
-        await db_1.db.query('UPDATE orders SET paymentStatus = ?, status = ? WHERE id = ?', [
-            'paid',
-            'processing',
-            existing.order_id,
-        ]);
-        await db_1.db.query('UPDATE payments SET status = ? WHERE paymentIntentId = ?', ['success', reference]);
-        const installment = data.meta?.installment || existing.metadata?.metadata?.installment;
-        if (installment) {
-            await db_1.db.query('UPDATE installments SET status = ?, paidAt = NOW() WHERE orderId = ? AND installmentNumber = ?', [
-                'paid',
-                existing.order_id,
-                Number(installment),
-            ]);
+        if (!(await transactions.exists(reference))) {
+            await transactions.create({
+                order_id: Number(order.id),
+                user_id: Number(order.userId),
+                reference,
+                gateway: 'flutterwave',
+                amount: info.amount,
+                currency: info.currency,
+                status: 'success',
+                metadata: {
+                    source: 'subscription_webhook',
+                    installment: Number(pending.installmentNumber),
+                    plan_reference: info.planReference || null,
+                    subscription_reference: info.subscriptionReference || null,
+                    customer_email: info.customerEmail || null,
+                    customer_reference: info.customerReference || null,
+                    webhook_payload: data,
+                },
+            });
         }
-        (0, paymentLogger_1.logWebhook)('flutterwave.webhook.processed', { reference });
+        await upsertPaymentByReference({
+            orderId: Number(order.id),
+            provider: 'flutterwave',
+            reference,
+            amount: info.amount,
+            currency: info.currency,
+        });
+        await markInstallmentPaid(Number(order.id), Number(pending.installmentNumber));
+        await updateOrderPaymentState(Number(order.id));
+        await upsertGatewaySubscriptionMapping({
+            provider: 'flutterwave',
+            orderId: Number(order.id),
+            userId: Number(order.userId),
+            planReference: info.planReference,
+            subscriptionReference: info.subscriptionReference,
+            customerEmail: info.customerEmail,
+            customerReference: info.customerReference,
+            metadata: {
+                source: 'subscription_fallback',
+                webhook_payload: data,
+            },
+        });
+        (0, paymentLogger_1.logWebhook)('flutterwave.webhook.processed', { reference, source: 'subscription_fallback' });
         return res.status(200).json({ ok: true });
     }
     catch (err) {
@@ -88,38 +354,108 @@ const paystackWebhook = async (req, res) => {
         if (!reference)
             return res.status(200).json({ ok: true });
         const existing = await transactions.findByReference(reference);
-        if (!existing)
-            return res.status(200).json({ ok: true });
-        if (existing.status === 'success')
-            return res.status(200).json({ ok: true });
-        const paidAmount = Number(data.amount) / 100;
-        if (paidAmount !== Number(existing.amount)) {
-            (0, paymentLogger_1.logWebhook)('paystack.webhook.amount_mismatch', {
+        const info = getPaystackInfo(data);
+        if (existing) {
+            if (existing.status === 'success')
+                return res.status(200).json({ ok: true });
+            if (info.amount !== Number(existing.amount)) {
+                (0, paymentLogger_1.logWebhook)('paystack.webhook.amount_mismatch', {
+                    reference,
+                    expected: existing.amount,
+                    received: info.amount,
+                });
+                return res.status(200).json({ ok: true });
+            }
+            await transactions.updateStatus(reference, 'success', {
+                ...existing.metadata,
+                webhook_payload: data,
+            });
+            await upsertPaymentByReference({
+                orderId: existing.order_id,
+                provider: 'paystack',
                 reference,
-                expected: existing.amount,
-                received: paidAmount,
+                amount: info.amount,
+                currency: info.currency,
+            });
+            await markInstallmentPaid(existing.order_id, Number(info.installment || existing.metadata?.metadata?.installment || 0) || undefined);
+            await updateOrderPaymentState(existing.order_id);
+            await upsertGatewaySubscriptionMapping({
+                provider: 'paystack',
+                orderId: existing.order_id,
+                userId: existing.user_id,
+                planReference: info.planReference,
+                subscriptionReference: info.subscriptionReference,
+                customerEmail: info.customerEmail,
+                customerReference: info.customerReference,
+                metadata: { source: 'known_transaction', webhook_payload: data },
+            });
+            (0, paymentLogger_1.logWebhook)('paystack.webhook.processed', { reference, source: 'known_transaction' });
+            return res.status(200).json({ ok: true });
+        }
+        const mapped = await resolveMappedOrder('paystack', info);
+        const candidateOrderId = info.orderId || mapped?.orderId;
+        if (!candidateOrderId)
+            return res.status(200).json({ ok: true });
+        const [orderRows] = await db_1.db.query('SELECT id, userId FROM orders WHERE id = ? LIMIT 1', [candidateOrderId]);
+        const order = orderRows[0];
+        if (!order)
+            return res.status(200).json({ ok: true });
+        const [pendingRows] = await db_1.db.query('SELECT installmentNumber, amount FROM installments WHERE orderId = ? AND status = ? ORDER BY installmentNumber ASC LIMIT 1', [order.id, 'pending']);
+        const pending = pendingRows[0];
+        if (!pending)
+            return res.status(200).json({ ok: true });
+        if (Number(pending.amount) !== info.amount) {
+            (0, paymentLogger_1.logWebhook)('paystack.webhook.pending_installment_amount_mismatch', {
+                reference,
+                orderId: order.id,
+                expected: pending.amount,
+                received: info.amount,
             });
             return res.status(200).json({ ok: true });
         }
-        await transactions.updateStatus(reference, 'success', {
-            ...existing.metadata,
-            webhook_payload: data,
-        });
-        await db_1.db.query('UPDATE orders SET paymentStatus = ?, status = ? WHERE id = ?', [
-            'paid',
-            'processing',
-            existing.order_id,
-        ]);
-        await db_1.db.query('UPDATE payments SET status = ? WHERE paymentIntentId = ?', ['success', reference]);
-        const installment = data.metadata?.installment || existing.metadata?.metadata?.installment;
-        if (installment) {
-            await db_1.db.query('UPDATE installments SET status = ?, paidAt = NOW() WHERE orderId = ? AND installmentNumber = ?', [
-                'paid',
-                existing.order_id,
-                Number(installment),
-            ]);
+        if (!(await transactions.exists(reference))) {
+            await transactions.create({
+                order_id: Number(order.id),
+                user_id: Number(order.userId),
+                reference,
+                gateway: 'paystack',
+                amount: info.amount,
+                currency: info.currency,
+                status: 'success',
+                metadata: {
+                    source: 'subscription_webhook',
+                    installment: Number(pending.installmentNumber),
+                    plan_reference: info.planReference || null,
+                    subscription_reference: info.subscriptionReference || null,
+                    customer_email: info.customerEmail || null,
+                    customer_reference: info.customerReference || null,
+                    webhook_payload: data,
+                },
+            });
         }
-        (0, paymentLogger_1.logWebhook)('paystack.webhook.processed', { reference });
+        await upsertPaymentByReference({
+            orderId: Number(order.id),
+            provider: 'paystack',
+            reference,
+            amount: info.amount,
+            currency: info.currency,
+        });
+        await markInstallmentPaid(Number(order.id), Number(pending.installmentNumber));
+        await updateOrderPaymentState(Number(order.id));
+        await upsertGatewaySubscriptionMapping({
+            provider: 'paystack',
+            orderId: Number(order.id),
+            userId: Number(order.userId),
+            planReference: info.planReference,
+            subscriptionReference: info.subscriptionReference,
+            customerEmail: info.customerEmail,
+            customerReference: info.customerReference,
+            metadata: {
+                source: 'subscription_fallback',
+                webhook_payload: data,
+            },
+        });
+        (0, paymentLogger_1.logWebhook)('paystack.webhook.processed', { reference, source: 'subscription_fallback' });
         return res.status(200).json({ ok: true });
     }
     catch (err) {

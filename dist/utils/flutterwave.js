@@ -28,7 +28,7 @@ async function initializeFlutterwaveTransaction({ amount, email, metadata = {}, 
         },
         body: JSON.stringify({
             tx_ref,
-            amount: numericAmount.toFixed(2),
+            amount: numericAmount,
             currency: currency.toUpperCase(),
             redirect_url: `${FRONTEND_URL}${redirectPath}`,
             payment_options: paymentOptions,

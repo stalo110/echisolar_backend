@@ -49,7 +49,16 @@ const login = async (req, res) => {
         if (!match)
             return res.status(401).json({ message: 'Invalid credentials' });
         const token = (0, jwt_1.generateToken)(user.id, user.role);
-        res.json({ token, user: { id: user.id, name: user.name, role: user.role } });
+        res.json({
+            token,
+            user: {
+                id: user.id,
+                name: user.name,
+                email: user.email,
+                country: user.country ?? null,
+                role: user.role,
+            },
+        });
     }
     catch (err) {
         res.status(500).json({ error: 'Server error' });

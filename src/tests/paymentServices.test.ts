@@ -72,6 +72,7 @@ test('Flutterwave initialization uses correct payload', async () => {
 
 test('Webhook signature validation works for Paystack and Flutterwave', async () => {
   process.env.PAYSTACK_SECRET_KEY = 'sk_test_abc';
+  process.env.FLUTTERWAVE_SECRET_KEY = 'flw_sk_test_abc';
   process.env.FLUTTERWAVE_SECRET_HASH = 'hash_abc';
 
   const repo = new FakeRepo();
@@ -80,9 +81,15 @@ test('Webhook signature validation works for Paystack and Flutterwave', async ()
 
   const rawBody = JSON.stringify({ event: 'charge.success', data: { reference: 'PAY-1-1' } });
   const signature = crypto.createHmac('sha512', process.env.PAYSTACK_SECRET_KEY!).update(rawBody).digest('hex');
+  const flutterwaveHmac = crypto
+    .createHmac('sha256', process.env.FLUTTERWAVE_SECRET_KEY!)
+    .update(rawBody)
+    .digest('hex');
 
   assert.equal(paystack.validateWebhookSignature(rawBody, signature), true);
   assert.equal(paystack.validateWebhookSignature(rawBody, 'bad'), false);
-  assert.equal(flutterwave.validateWebhookSignature('hash_abc'), true);
-  assert.equal(flutterwave.validateWebhookSignature('bad'), false);
+  assert.equal(flutterwave.validateWebhookSignature(rawBody, 'hash_abc', undefined), true);
+  assert.equal(flutterwave.validateWebhookSignature(rawBody, undefined, flutterwaveHmac), true);
+  assert.equal(flutterwave.validateWebhookSignature(rawBody, 'bad', undefined), false);
+  assert.equal(flutterwave.validateWebhookSignature(rawBody, undefined, 'bad'), false);
 });
