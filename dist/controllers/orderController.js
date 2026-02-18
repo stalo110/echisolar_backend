@@ -12,6 +12,31 @@ const toAmount = (value) => {
     const parsed = Number(value);
     return Number.isFinite(parsed) ? parsed : 0;
 };
+const upsertGatewaySubscription = async (params) => {
+    const planReference = String(params.planReference || '').trim();
+    if (!planReference)
+        return;
+    const [rows] = await db_1.db.query('SELECT id FROM gatewaySubscriptions WHERE orderId = ? AND provider = ? AND planReference = ? LIMIT 1', [params.orderId, params.provider, planReference]);
+    const existing = rows[0];
+    const metadata = params.metadata ? JSON.stringify(params.metadata) : null;
+    if (existing) {
+        await db_1.db.query(`UPDATE gatewaySubscriptions
+       SET userId = ?, customerEmail = ?, status = ?, metadata = ?
+       WHERE id = ?`, [params.userId, params.customerEmail, 'active', metadata, existing.id]);
+        return;
+    }
+    await db_1.db.query(`INSERT INTO gatewaySubscriptions
+      (orderId, userId, provider, planReference, customerEmail, status, metadata)
+     VALUES (?,?,?,?,?,?,?)`, [
+        params.orderId,
+        params.userId,
+        params.provider,
+        planReference,
+        params.customerEmail,
+        'active',
+        metadata,
+    ]);
+};
 const initiateCheckout = async (req, res) => {
     const userId = getOrderUserId(req);
     const { shippingAddressId, providerPreference = 'AUTO', planOption = 'full', currency = 'usd' } = req.body;
@@ -79,6 +104,9 @@ const initiateCheckout = async (req, res) => {
         });
         if (planOption !== 'full') {
             const months = Number(planOption);
+            if (!Number.isInteger(months) || ![2, 4, 6].includes(months)) {
+                return res.status(400).json({ error: 'Invalid installment option. Use 2, 4, or 6 months.' });
+            }
             const schedule = (0, installmentService_1.calculateInstallments)(total, months);
             for (const s of schedule) {
                 await db_1.db.query('INSERT INTO installments (orderId, installmentNumber, dueDate, amount, status) VALUES (?,?,?,?,?)', [
@@ -90,8 +118,37 @@ const initiateCheckout = async (req, res) => {
                 ]);
             }
             const first = schedule[0];
+            const recurringPlanName = `EchiSolar Order #${orderId} (${months} months)`;
+            const recurringPlan = await paymentDispatcher.createRecurringPlan(provider, {
+                name: recurringPlanName,
+                amount: first.amount,
+                interval: 'monthly',
+                currency: normalizedCurrency,
+                duration: months,
+                invoiceLimit: months,
+            });
+            const planMetadata = {
+                installment: 1,
+                installment_months: months,
+                ...(recurringPlan.planCode ? { subscription_plan_code: recurringPlan.planCode } : {}),
+                ...(recurringPlan.paymentPlanId ? { subscription_plan_id: recurringPlan.paymentPlanId } : {}),
+            };
+            await upsertGatewaySubscription({
+                orderId,
+                userId,
+                provider,
+                planReference: recurringPlan.planCode || recurringPlan.paymentPlanId,
+                customerEmail: userEmail,
+                metadata: {
+                    orderId,
+                    provider,
+                    months,
+                    schedule,
+                    plan: recurringPlan.raw ?? null,
+                },
+            });
             if (provider === 'flutterwave') {
-                const data = await paymentDispatcher.initiate({ id: orderId, userId, totalAmount: first.amount }, 'flutterwave', userEmail, normalizedCurrency, { installment: 1 });
+                const data = await paymentDispatcher.initiate({ id: orderId, userId, totalAmount: first.amount }, 'flutterwave', userEmail, normalizedCurrency, planMetadata, { paymentPlanId: recurringPlan.paymentPlanId });
                 await db_1.db.query('INSERT INTO payments (orderId, provider, paymentIntentId, amount, currency, status) VALUES (?,?,?,?,?,?)', [
                     orderId,
                     'flutterwave',
@@ -108,10 +165,11 @@ const initiateCheckout = async (req, res) => {
                     tx_ref: data.reference,
                     amount: first.amount,
                     currency: normalizedCurrency,
+                    subscription_plan_id: recurringPlan.paymentPlanId || null,
                 });
             }
             else {
-                const data = await paymentDispatcher.initiate({ id: orderId, userId, totalAmount: first.amount }, 'paystack', userEmail, normalizedCurrency, { installment: 1 });
+                const data = await paymentDispatcher.initiate({ id: orderId, userId, totalAmount: first.amount }, 'paystack', userEmail, normalizedCurrency, planMetadata, { planCode: recurringPlan.planCode });
                 await db_1.db.query('INSERT INTO payments (orderId, provider, paymentIntentId, amount, currency, status) VALUES (?,?,?,?,?,?)', [
                     orderId,
                     'paystack',
@@ -128,6 +186,7 @@ const initiateCheckout = async (req, res) => {
                     reference: data.reference,
                     amount: first.amount,
                     currency: normalizedCurrency,
+                    subscription_plan_code: recurringPlan.planCode || null,
                 });
             }
         }

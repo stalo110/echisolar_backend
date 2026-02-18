@@ -1,5 +1,9 @@
 "use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
+const crypto_1 = __importDefault(require("crypto"));
 const http_1 = require("../utils/http");
 const db_1 = require("../config/db");
 const paymentLogger_1 = require("../utils/paymentLogger");
@@ -9,9 +13,9 @@ class FlutterwaveService {
         this.request = request;
         this.baseUrl = 'https://api.flutterwave.com/v3';
         this.secretKey = process.env.FLUTTERWAVE_SECRET_KEY || '';
-        this.secretHash = process.env.FLUTTERWAVE_SECRET_HASH || '';
+        this.secretHash = process.env.FLUTTERWAVE_SECRET_HASH || process.env.FLUTTERWAVE_WEBHOOK_HASH || '';
     }
-    async initialize(order, email, currency, metadata = {}) {
+    async initialize(order, email, currency, metadata = {}, options = {}) {
         if (!this.secretKey)
             throw new Error('Missing Flutterwave secret key');
         let reference = `FLW-${order.id}-${Date.now()}`;
@@ -20,11 +24,12 @@ class FlutterwaveService {
         }
         const payload = {
             tx_ref: reference,
-            amount: Number(order.totalAmount).toFixed(2),
-            currency: currency || 'NGN',
+            amount: Number(order.totalAmount),
+            currency: String(currency || 'NGN').toUpperCase(),
             redirect_url: `${process.env.APP_URL || process.env.FRONTEND_URL || ''}/verify-payment?gateway=flutterwave`,
             customer: { email },
             meta: { order_id: order.id, ...metadata },
+            ...(options.paymentPlanId ? { payment_plan: options.paymentPlanId } : {}),
         };
         (0, paymentLogger_1.logPayment)('flutterwave.initialize.request', { orderId: order.id, reference, payload });
         try {
@@ -65,6 +70,36 @@ class FlutterwaveService {
             (0, paymentLogger_1.logPayment)('flutterwave.initialize.error', { reference, error: err.message });
             throw err;
         }
+    }
+    async createPaymentPlan(input) {
+        if (!this.secretKey)
+            throw new Error('Missing Flutterwave secret key');
+        const payload = {
+            name: input.name,
+            amount: Number(input.amount),
+            interval: input.interval,
+            currency: String(input.currency || 'NGN').toUpperCase(),
+            ...(input.duration ? { duration: input.duration } : {}),
+        };
+        (0, paymentLogger_1.logPayment)('flutterwave.plan.create.request', { payload });
+        const res = await this.request(`${this.baseUrl}/payment-plans`, {
+            method: 'POST',
+            headers: {
+                Authorization: `Bearer ${this.secretKey}`,
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(payload),
+        });
+        const json = await res.json();
+        if (json.status !== 'success' || !json.data?.id) {
+            (0, paymentLogger_1.logPayment)('flutterwave.plan.create.failed', { response: json });
+            throw new Error(json.message || 'Unable to create Flutterwave payment plan');
+        }
+        (0, paymentLogger_1.logPayment)('flutterwave.plan.create.success', { id: json.data.id });
+        return {
+            id: String(json.data.id),
+            raw: json.data,
+        };
     }
     async verify(reference) {
         if (!this.secretKey)
@@ -113,10 +148,23 @@ class FlutterwaveService {
             throw err;
         }
     }
-    validateWebhookSignature(signature) {
-        if (!signature || !this.secretHash)
+    constantTimeEquals(a, b) {
+        const left = Buffer.from(a, 'utf8');
+        const right = Buffer.from(b, 'utf8');
+        if (left.length !== right.length)
             return false;
-        return signature === this.secretHash;
+        return crypto_1.default.timingSafeEqual(left, right);
+    }
+    validateWebhookSignature(rawBody, legacySignature, hmacSignature) {
+        const legacy = String(legacySignature || '').trim();
+        const hmac = String(hmacSignature || '').trim();
+        const legacyValid = !!legacy && !!this.secretHash && this.constantTimeEquals(legacy, String(this.secretHash).trim());
+        let hmacValid = false;
+        if (rawBody && hmac && this.secretKey) {
+            const expected = crypto_1.default.createHmac('sha256', this.secretKey).update(rawBody).digest('hex');
+            hmacValid = this.constantTimeEquals(hmac.toLowerCase(), expected.toLowerCase());
+        }
+        return legacyValid || hmacValid;
     }
     getGateway() {
         return 'flutterwave';

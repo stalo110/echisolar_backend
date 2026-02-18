@@ -14,7 +14,7 @@ class PaystackService {
         this.baseUrl = 'https://api.paystack.co';
         this.secretKey = process.env.PAYSTACK_SECRET_KEY || '';
     }
-    async initialize(order, email, currency, metadata = {}) {
+    async initialize(order, email, currency, metadata = {}, options = {}) {
         if (!this.secretKey)
             throw new Error('Missing Paystack secret key');
         let reference = `PAY-${order.id}-${Date.now()}`;
@@ -24,9 +24,11 @@ class PaystackService {
         const payload = {
             email,
             amount: Math.round(order.totalAmount * 100),
+            currency: String(currency || 'NGN').toUpperCase(),
             reference,
             callback_url: `${process.env.APP_URL || process.env.FRONTEND_URL || ''}/verify-payment?gateway=paystack`,
             metadata: { order_id: order.id, ...metadata },
+            ...(options.planCode ? { plan: options.planCode } : {}),
         };
         (0, paymentLogger_1.logPayment)('paystack.initialize.request', { orderId: order.id, reference, payload });
         try {
@@ -70,6 +72,40 @@ class PaystackService {
             (0, paymentLogger_1.logPayment)('paystack.initialize.error', { reference, error: err.message });
             throw err;
         }
+    }
+    async createPlan(input) {
+        if (!this.secretKey)
+            throw new Error('Missing Paystack secret key');
+        const payload = {
+            name: input.name,
+            amount: Math.round(Number(input.amount) * 100),
+            interval: input.interval,
+            currency: String(input.currency || 'NGN').toUpperCase(),
+            ...(input.invoiceLimit ? { invoice_limit: input.invoiceLimit } : {}),
+        };
+        (0, paymentLogger_1.logPayment)('paystack.plan.create.request', { payload });
+        const res = await this.request(`${this.baseUrl}/plan`, {
+            method: 'POST',
+            headers: {
+                Authorization: `Bearer ${this.secretKey}`,
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(payload),
+        });
+        const json = await res.json();
+        if (!json.status || !json.data?.plan_code) {
+            (0, paymentLogger_1.logPayment)('paystack.plan.create.failed', { response: json });
+            throw new Error(json.message || 'Unable to create Paystack plan');
+        }
+        (0, paymentLogger_1.logPayment)('paystack.plan.create.success', {
+            plan_code: json.data.plan_code,
+            id: json.data.id,
+        });
+        return {
+            planCode: json.data.plan_code,
+            id: Number(json.data.id),
+            raw: json.data,
+        };
     }
     async verify(reference) {
         if (!this.secretKey)
