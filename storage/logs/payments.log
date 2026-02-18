@@ -43,3 +43,26 @@
 {"timestamp":"2026-02-18T10:13:44.637Z","event":"initiate.start","orderId":13,"gateway":"flutterwave","email":"stanleyoffor11@gmail.com"}
 {"timestamp":"2026-02-18T10:13:44.639Z","event":"flutterwave.initialize.request","orderId":13,"reference":"FLW-13-1771409624637","payload":{"tx_ref":"FLW-13-1771409624637","amount":20000,"currency":"NGN","redirect_url":"https://api.echisolar.com/verify-payment?gateway=flutterwave","customer":{"email":"stanleyoffor11@gmail.com"},"meta":{"order_id":13}}}
 {"timestamp":"2026-02-18T10:13:44.988Z","event":"flutterwave.initialize.success","reference":"FLW-13-1771409624637","link":"https://checkout-v2.dev-flutterwave.com/v3/hosted/pay/3b3682d0a3c1174b4adb"}
+{"timestamp":"2026-02-18T10:37:16.563Z","event":"initiate.start","orderId":14,"gateway":"flutterwave","email":"stanleyoffor11@gmail.com"}
+{"timestamp":"2026-02-18T10:37:16.571Z","event":"flutterwave.initialize.request","orderId":14,"reference":"FLW-14-1771411036566","payload":{"tx_ref":"FLW-14-1771411036566","amount":20000,"currency":"NGN","redirect_url":"https://api.echisolar.com/verify-payment?gateway=flutterwave","customer":{"email":"stanleyoffor11@gmail.com"},"meta":{"order_id":14}}}
+{"timestamp":"2026-02-18T10:37:16.959Z","event":"flutterwave.initialize.success","reference":"FLW-14-1771411036566","link":"https://checkout-v2.dev-flutterwave.com/v3/hosted/pay/31e0bef1e128b519bd27"}
+{"timestamp":"2026-02-18T10:37:36.225Z","event":"verify.start","reference":"10026271","gateway":"flutterwave"}
+{"timestamp":"2026-02-18T10:37:36.226Z","event":"flutterwave.verify.request","reference":"10026271"}
+{"timestamp":"2026-02-18T10:37:36.553Z","event":"flutterwave.verify.success","reference":"FLW-14-1771411036566","verification_identifier":"10026271","isSuccessful":true}
+{"timestamp":"2026-02-18T13:45:10.739Z","event":"plan.create.start","gateway":"flutterwave","input":{"name":"EchiSolar Order #15 (2 months)","amount":10000,"interval":"monthly","currency":"NGN","duration":2,"invoiceLimit":2}}
+{"timestamp":"2026-02-18T13:45:10.751Z","event":"flutterwave.plan.create.request","payload":{"name":"EchiSolar Order #15 (2 months)","amount":10000,"interval":"monthly","currency":"NGN","duration":2}}
+{"timestamp":"2026-02-18T13:45:11.193Z","event":"flutterwave.plan.create.success","id":229975}
+{"timestamp":"2026-02-18T13:45:11.274Z","event":"initiate.start","orderId":15,"gateway":"flutterwave","email":"offorstanley4real@gmail.com"}
+{"timestamp":"2026-02-18T13:45:11.341Z","event":"flutterwave.initialize.request","orderId":15,"reference":"FLW-15-1771422311275","payload":{"tx_ref":"FLW-15-1771422311275","amount":10000,"currency":"NGN","redirect_url":"https://api.echisolar.com/verify-payment?gateway=flutterwave","customer":{"email":"offorstanley4real@gmail.com"},"meta":{"order_id":15,"installment":1,"installment_months":2,"subscription_plan_id":"229975"},"payment_plan":"229975"}}
+{"timestamp":"2026-02-18T13:45:11.649Z","event":"flutterwave.initialize.success","reference":"FLW-15-1771422311275","link":"https://checkout-v2.dev-flutterwave.com/v3/hosted/pay/07feb7cd438882c9c050"}
+{"timestamp":"2026-02-18T13:46:38.132Z","event":"verify.start","reference":"FLW-15-1771422311275","gateway":"flutterwave"}
+{"timestamp":"2026-02-18T13:46:38.133Z","event":"flutterwave.verify.request","reference":"FLW-15-1771422311275"}
+{"timestamp":"2026-02-18T13:46:38.678Z","event":"flutterwave.verify.failed","reference":"FLW-15-1771422311275","response":{"status":"error","message":"No transaction was found for this id","data":null}}
+{"timestamp":"2026-02-18T13:46:38.678Z","event":"flutterwave.verify.error","reference":"FLW-15-1771422311275","error":"No transaction was found for this id"}
+{"timestamp":"2026-02-18T13:46:38.678Z","event":"verify.endpoint.error","reference":"FLW-15-1771422311275","verificationReference":"FLW-15-1771422311275","gateway":"flutterwave","error":"No transaction was found for this id"}
+{"timestamp":"2026-02-18T13:47:12.102Z","event":"initiate.start","orderId":16,"gateway":"flutterwave","email":"offorstanley4real@gmail.com"}
+{"timestamp":"2026-02-18T13:47:12.109Z","event":"flutterwave.initialize.request","orderId":16,"reference":"FLW-16-1771422432102","payload":{"tx_ref":"FLW-16-1771422432102","amount":20000,"currency":"NGN","redirect_url":"https://api.echisolar.com/verify-payment?gateway=flutterwave","customer":{"email":"offorstanley4real@gmail.com"},"meta":{"order_id":16}}}
+{"timestamp":"2026-02-18T13:47:12.504Z","event":"flutterwave.initialize.success","reference":"FLW-16-1771422432102","link":"https://checkout-v2.dev-flutterwave.com/v3/hosted/pay/17c494cab680e6d909e3"}
+{"timestamp":"2026-02-18T13:47:33.084Z","event":"verify.start","reference":"10026825","gateway":"flutterwave"}
+{"timestamp":"2026-02-18T13:47:33.084Z","event":"flutterwave.verify.request","reference":"10026825"}
+{"timestamp":"2026-02-18T13:47:33.435Z","event":"flutterwave.verify.success","reference":"FLW-16-1771422432102","verification_identifier":"10026825","isSuccessful":true}
