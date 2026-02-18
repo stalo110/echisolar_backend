@@ -7,3 +7,4 @@ const r = (0, express_1.Router)();
 r.get('/me', authMiddleware_1.protect, userController_1.getProfile);
 r.put('/me', authMiddleware_1.protect, userController_1.updateProfile);
 exports.default = r;
+//# sourceMappingURL=userRoutes.js.map

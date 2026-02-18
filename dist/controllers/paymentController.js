@@ -167,3 +167,4 @@ const getPaymentConfig = async (_req, res) => {
     });
 };
 exports.getPaymentConfig = getPaymentConfig;
+//# sourceMappingURL=paymentController.js.map

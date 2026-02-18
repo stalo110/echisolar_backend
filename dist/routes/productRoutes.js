@@ -16,3 +16,4 @@ r.post('/', authMiddleware_1.protect, authMiddleware_1.adminOnly, upload_1.defau
 r.put('/:id', authMiddleware_1.protect, authMiddleware_1.adminOnly, upload_1.default.array('images', 6), productController_1.updateProduct);
 r.delete('/:id', authMiddleware_1.protect, authMiddleware_1.adminOnly, productController_1.deleteProduct);
 exports.default = r;
+//# sourceMappingURL=productRoutes.js.map

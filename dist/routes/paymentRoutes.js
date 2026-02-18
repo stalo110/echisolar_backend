@@ -15,3 +15,4 @@ r.get('/config', paymentController_1.getPaymentConfig);
 // Admin transaction lookup
 r.get('/transaction/:reference', authMiddleware_1.protect, authMiddleware_1.adminOnly, paymentController_1.getTransactionByReference);
 exports.default = r;
+//# sourceMappingURL=paymentRoutes.js.map

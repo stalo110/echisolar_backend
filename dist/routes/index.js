@@ -22,3 +22,4 @@ router.use('/payments', paymentRoutes_1.default);
 router.use('/users', userRoutes_1.default);
 router.use('/admin', adminRoutes_1.default);
 exports.default = router;
+//# sourceMappingURL=index.js.map

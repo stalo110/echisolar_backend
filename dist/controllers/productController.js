@@ -175,3 +175,4 @@ const deleteProduct = async (req, res) => {
     }
 };
 exports.deleteProduct = deleteProduct;
+//# sourceMappingURL=productController.js.map

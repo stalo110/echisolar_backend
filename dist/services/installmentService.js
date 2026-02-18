@@ -23,3 +23,4 @@ function calculateInstallments(total, months) {
         schedule[schedule.length - 1].amount = Number((schedule[schedule.length - 1].amount + diff).toFixed(2));
     return schedule;
 }
+//# sourceMappingURL=installmentService.js.map

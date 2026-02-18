@@ -74,3 +74,4 @@ async function notifyOrderStakeholders(options) {
         console.error('Order notification email failed', err);
     }
 }
+//# sourceMappingURL=mailer.js.map

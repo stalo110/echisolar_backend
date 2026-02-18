@@ -10,3 +10,4 @@ r.put('/:itemId', authMiddleware_1.protect, cartController_1.updateCartItem);
 r.delete('/', authMiddleware_1.protect, cartController_1.clearCart);
 r.delete('/:itemId', authMiddleware_1.protect, cartController_1.removeCartItem);
 exports.default = r;
+//# sourceMappingURL=cartRoutes.js.map
