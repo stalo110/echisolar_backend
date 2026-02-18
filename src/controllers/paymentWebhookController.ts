@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { createPaymentServices } from '../services/paymentFactory';
 import { logWebhook } from '../utils/paymentLogger';
 import { db } from '../config/db';
+import { sendPaymentSuccessNotificationsByOrder } from '../utils/mailer';
 
 const { transactions, paystack, flutterwave } = createPaymentServices();
 
@@ -353,6 +354,13 @@ export const flutterwaveWebhook = async (req: any, res: Response) => {
         Number(info.installment || existing.metadata?.metadata?.installment || 0) || undefined
       );
       await updateOrderPaymentState(existing.order_id);
+      await sendPaymentSuccessNotificationsByOrder({
+        orderId: existing.order_id,
+        provider: 'flutterwave',
+        reference,
+        amount: info.amount,
+        currency: info.currency,
+      });
       await upsertGatewaySubscriptionMapping({
         provider: 'flutterwave',
         orderId: existing.order_id,
@@ -421,6 +429,13 @@ export const flutterwaveWebhook = async (req: any, res: Response) => {
     });
     await markInstallmentPaid(Number(order.id), Number(pending.installmentNumber));
     await updateOrderPaymentState(Number(order.id));
+    await sendPaymentSuccessNotificationsByOrder({
+      orderId: Number(order.id),
+      provider: 'flutterwave',
+      reference,
+      amount: info.amount,
+      currency: info.currency,
+    });
     await upsertGatewaySubscriptionMapping({
       provider: 'flutterwave',
       orderId: Number(order.id),
@@ -500,6 +515,13 @@ export const paystackWebhook = async (req: Request, res: Response) => {
         Number(info.installment || existing.metadata?.metadata?.installment || 0) || undefined
       );
       await updateOrderPaymentState(existing.order_id);
+      await sendPaymentSuccessNotificationsByOrder({
+        orderId: existing.order_id,
+        provider: 'paystack',
+        reference,
+        amount: info.amount,
+        currency: info.currency,
+      });
       await upsertGatewaySubscriptionMapping({
         provider: 'paystack',
         orderId: existing.order_id,
@@ -568,6 +590,13 @@ export const paystackWebhook = async (req: Request, res: Response) => {
     });
     await markInstallmentPaid(Number(order.id), Number(pending.installmentNumber));
     await updateOrderPaymentState(Number(order.id));
+    await sendPaymentSuccessNotificationsByOrder({
+      orderId: Number(order.id),
+      provider: 'paystack',
+      reference,
+      amount: info.amount,
+      currency: info.currency,
+    });
     await upsertGatewaySubscriptionMapping({
       provider: 'paystack',
       orderId: Number(order.id),

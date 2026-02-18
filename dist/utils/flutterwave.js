@@ -3,9 +3,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.initializeFlutterwaveTransaction = initializeFlutterwaveTransaction;
-exports.verifyFlutterwaveTransaction = verifyFlutterwaveTransaction;
-exports.verifyFlutterwaveSignature = verifyFlutterwaveSignature;
+exports.verifyFlutterwaveSignature = exports.verifyFlutterwaveTransaction = exports.initializeFlutterwaveTransaction = void 0;
 const node_fetch_1 = __importDefault(require("node-fetch"));
 const FLUTTERWAVE_SECRET_KEY = process.env.FLUTTERWAVE_SECRET_KEY;
 const FLUTTERWAVE_ENCRYPTION_KEY = process.env.FLUTTERWAVE_ENCRYPTION_KEY;
@@ -46,6 +44,7 @@ async function initializeFlutterwaveTransaction({ amount, email, metadata = {}, 
         tx_ref,
     };
 }
+exports.initializeFlutterwaveTransaction = initializeFlutterwaveTransaction;
 async function verifyFlutterwaveTransaction(transactionId) {
     const response = await (0, node_fetch_1.default)(`https://api.flutterwave.com/v3/transactions/${transactionId}/verify`, {
         method: 'GET',
@@ -59,9 +58,11 @@ async function verifyFlutterwaveTransaction(transactionId) {
     }
     return json.data;
 }
+exports.verifyFlutterwaveTransaction = verifyFlutterwaveTransaction;
 function verifyFlutterwaveSignature(_rawBody, signature) {
     if (!signature)
         return false;
     return signature === FLUTTERWAVE_SECRET_HASH;
 }
+exports.verifyFlutterwaveSignature = verifyFlutterwaveSignature;
 //# sourceMappingURL=flutterwave.js.map

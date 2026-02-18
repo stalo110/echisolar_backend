@@ -12,6 +12,7 @@ const orderRoutes_1 = __importDefault(require("./orderRoutes"));
 const paymentRoutes_1 = __importDefault(require("./paymentRoutes"));
 const userRoutes_1 = __importDefault(require("./userRoutes"));
 const adminRoutes_1 = __importDefault(require("./adminRoutes"));
+const contactRoutes_1 = __importDefault(require("./contactRoutes"));
 const router = (0, express_1.Router)();
 router.use('/auth', authRoutes_1.default);
 router.use('/products', productRoutes_1.default);
@@ -21,5 +22,6 @@ router.use('/orders', orderRoutes_1.default);
 router.use('/payments', paymentRoutes_1.default);
 router.use('/users', userRoutes_1.default);
 router.use('/admin', adminRoutes_1.default);
+router.use('/contact', contactRoutes_1.default);
 exports.default = router;
 //# sourceMappingURL=index.js.map

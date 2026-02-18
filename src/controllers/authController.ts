@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
 import { db } from '../config/db';
 import { generateToken } from '../utils/jwt';
+import { sendWelcomeEmail } from '../utils/mailer';
 
 export const register = async (req: Request, res: Response) => {
   const { name, email, password, country } = req.body;
@@ -19,6 +20,7 @@ export const register = async (req: Request, res: Response) => {
 
     const userId = (result as any).insertId;
     const token = generateToken(userId, 'user');
+    void sendWelcomeEmail({ name, email });
     res.status(201).json({
       token,
       user: {

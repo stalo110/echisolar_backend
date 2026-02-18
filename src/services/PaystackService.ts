@@ -3,6 +3,7 @@ import { fetchWithTimeout } from '../utils/http';
 import TransactionRepository, { TransactionGateway } from './TransactionRepository';
 import { db } from '../config/db';
 import { logPayment } from '../utils/paymentLogger';
+import { sendPaymentSuccessNotificationsByOrder } from '../utils/mailer';
 
 export type OrderLike = { id: number; userId: number; totalAmount: number };
 export type PaystackInitializeOptions = { planCode?: string; callbackUrl?: string };
@@ -172,6 +173,13 @@ class PaystackService {
       if (isSuccessful) {
         await db.query('UPDATE orders SET paymentStatus = ?, status = ? WHERE id = ?', ['paid', 'processing', transaction.order_id]);
         await db.query('UPDATE payments SET status = ? WHERE paymentIntentId = ?', ['success', reference]);
+        await sendPaymentSuccessNotificationsByOrder({
+          orderId: transaction.order_id,
+          provider: 'paystack',
+          reference,
+          amount: paidAmount,
+          currency: String(transaction.currency || 'NGN'),
+        });
       }
 
       logPayment('paystack.verify.success', { reference, isSuccessful });

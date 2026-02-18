@@ -37,10 +37,12 @@ Express + TypeScript API for the EchiSolar React storefront. It manages MySQL da
 | `PAYSTACK_WEBHOOK_SECRET` | Paystack webhook signing secret. |
 | `FLUTTERWAVE_SECRET_KEY` / `FLUTTERWAVE_PUBLIC_KEY` | Flutterwave API keys. |
 | `FLUTTERWAVE_ENCRYPTION_KEY` / `FLUTTERWAVE_WEBHOOK_HASH` | Flutterwave webhook signature secrets. |
-| `EMAIL` / `USERNAME` | SMTP sender address (username) used for outgoing notifications. |
-| `PASSWORD` | SMTP password. |
-| `INCOMING_SERVER` | SMTP host (used by Nodemailer). |
+| `SMTP_HOST` / `INCOMING_SERVER` | SMTP host (Nodemailer uses either). |
 | `SMTP_PORT` | SMTP port (usually 465 for SSL). |
+| `SMTP_USER` / `USERNAME` / `EMAIL` | SMTP username (fallback order shown). |
+| `SMTP_PASS` / `PASSWORD` | SMTP password. |
+| `SMTP_FROM` | Optional custom sender label/email (e.g. `EchiSolar <info@...>`). |
+| `ADMIN_NOTIFICATION_EMAIL` | Optional recipient for admin payment alerts. |
 | `CLOUDINARY_*` | Cloudinary credentials used when uploading product images. |
 | `FRONTEND_URL` | Allowed CORS origin + callback base URL for Paystack and Flutterwave. |
 
@@ -60,6 +62,11 @@ A simple Postman collection is documented in `docs/postman_collection.md`. Highl
 | `DELETE /api/cart/:itemId` | Remove a single item |
 | `DELETE /api/cart` | Clear entire cart |
 | `POST /api/orders/checkout` | Initiate Flutterwave/Paystack checkout flow |
+| `POST /api/contact` | Save public contact form message |
+| `GET /api/admin/messages` | Admin-only inbox for contact submissions |
+| `GET /api/admin/messages/:id` | Admin-only message detail |
+| `PUT /api/admin/messages/:id/reply` | Admin-only, saves reply and emails sender |
+| `PUT /api/admin/messages/:id/status` | Admin-only read/unread update |
 | `POST /api/payments/flutterwave/webhook` | Raw body required (configured in `app.ts`) |
 | `POST /api/payments/paystack/webhook` | Paystack webhook endpoint |
 
@@ -87,5 +94,9 @@ These credentials unlock the admin dashboard (`/admin/...`) and the standard cus
 ## Notes
 
 - Flutterwave expects the raw body for signature verification (the middleware in `app.ts` preserves it).
-- A checkout email is sent to the guest (and the configured `USERNAME`) with the payment link for Flutterwave/Paystack.
+- A checkout email is sent to the customer (and admin email if configured) with the payment link for Flutterwave/Paystack.
+- Welcome emails are triggered on successful registration.
+- Successful payment confirmation sends customer + admin notifications with order summary and delivery address.
+- Contact form replies from admins are sent by email and logged.
+- Email attempts are written to `email_logs` with statuses (`sent`, `failed`, `skipped`).
 - Uploaded product images go straight to Cloudinary via the `uploadBufferToCloudinary` helper.
