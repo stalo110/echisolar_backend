@@ -77,24 +77,33 @@ export const initializePayment = async (req: AuthReq, res: Response) => {
 };
 
 export const verifyPayment = async (req: Request, res: Response) => {
-  const reference = String(req.query.reference || '').trim();
+  const reference = String(req.query.reference || req.query.ref || req.query.tx_ref || '').trim();
+  const transactionId = String(req.query.transaction_id || '').trim();
   const gateway = String(req.query.gateway || '').trim() as TransactionGateway;
 
-  if (!reference || !gateway) {
+  const verificationReference = gateway === 'flutterwave' ? transactionId || reference : reference;
+  const redirectReference = reference || transactionId || '';
+
+  if (!verificationReference || !gateway) {
     return res.status(400).json({ error: 'Reference and gateway are required' });
   }
 
   try {
-    const result = await dispatcher.verify(reference, gateway);
+    const result = await dispatcher.verify(verificationReference, gateway);
     const redirectBase = process.env.FRONTEND_URL || '/';
     if (result.success) {
-      return res.redirect(`${redirectBase}/order/success?ref=${encodeURIComponent(reference)}`);
+      return res.redirect(`${redirectBase}/order/success?ref=${encodeURIComponent(redirectReference || verificationReference)}`);
     }
-    return res.redirect(`${redirectBase}/order/failed?ref=${encodeURIComponent(reference)}`);
+    return res.redirect(`${redirectBase}/order/failed?ref=${encodeURIComponent(redirectReference || verificationReference)}`);
   } catch (err: any) {
-    logPayment('verify.endpoint.error', { reference, gateway, error: err.message });
+    logPayment('verify.endpoint.error', {
+      reference: redirectReference || verificationReference,
+      verificationReference,
+      gateway,
+      error: err.message,
+    });
     const redirectBase = process.env.FRONTEND_URL || '/';
-    return res.redirect(`${redirectBase}/order/failed?ref=${encodeURIComponent(reference)}`);
+    return res.redirect(`${redirectBase}/order/failed?ref=${encodeURIComponent(redirectReference || verificationReference)}`);
   }
 };
 

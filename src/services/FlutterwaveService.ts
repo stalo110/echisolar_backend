@@ -130,52 +130,89 @@ class FlutterwaveService {
   async verify(reference: string) {
     if (!this.secretKey) throw new Error('Missing Flutterwave secret key');
 
-    logPayment('flutterwave.verify.request', { reference });
+    const identifier = String(reference || '').trim();
+    if (!identifier) throw new Error('Missing Flutterwave verification reference');
+
+    logPayment('flutterwave.verify.request', { reference: identifier });
 
     try {
-      const res = await this.request(`${this.baseUrl}/transactions/${reference}/verify`, {
-        method: 'GET',
-        headers: { Authorization: `Bearer ${this.secretKey}` },
-      });
-      const json = await res.json();
-      if (json.status !== 'success') {
-        logPayment('flutterwave.verify.failed', { reference, response: json });
-        throw new Error(json.message || 'Flutterwave verification failed');
+      const headers = { Authorization: `Bearer ${this.secretKey}` };
+      const byId = async () => {
+        const res = await this.request(`${this.baseUrl}/transactions/${encodeURIComponent(identifier)}/verify`, {
+          method: 'GET',
+          headers,
+        });
+        return res.json();
+      };
+      const byTxRef = async () => {
+        const res = await this.request(
+          `${this.baseUrl}/transactions/verify_by_reference?tx_ref=${encodeURIComponent(identifier)}`,
+          {
+            method: 'GET',
+            headers,
+          }
+        );
+        return res.json();
+      };
+
+      const attempts = /^\d+$/.test(identifier) ? [byId, byTxRef] : [byTxRef, byId];
+      let json: any = null;
+      let lastResponse: any = null;
+
+      for (const attempt of attempts) {
+        try {
+          const candidate = await attempt();
+          lastResponse = candidate;
+          if (candidate?.status === 'success' && candidate?.data) {
+            json = candidate;
+            break;
+          }
+        } catch (attemptErr: any) {
+          lastResponse = { message: attemptErr?.message || 'verification attempt failed' };
+        }
       }
 
-      const transaction = await this.transactions.findByReference(reference);
-      if (!transaction) throw new Error(`Transaction not found: ${reference}`);
+      if (!json) {
+        logPayment('flutterwave.verify.failed', { reference: identifier, response: lastResponse });
+        throw new Error(lastResponse?.message || 'Flutterwave verification failed');
+      }
+
+      const txRef = String(json.data?.tx_ref || identifier).trim();
+      const transaction =
+        (await this.transactions.findByReference(txRef)) || (await this.transactions.findByReference(identifier));
+      if (!transaction) throw new Error(`Transaction not found: ${txRef}`);
 
       const isSuccessful = json.data?.status === 'successful';
       const paidAmount = Number(json.data?.amount || 0);
 
       if (isSuccessful && paidAmount !== Number(transaction.amount)) {
         logPayment('flutterwave.verify.amount_mismatch', {
-          reference,
+          reference: txRef,
           expected: transaction.amount,
           received: paidAmount,
         });
         throw new Error('Payment amount mismatch');
       }
 
-      await this.transactions.updateStatus(reference, isSuccessful ? 'success' : 'failed', {
+      await this.transactions.updateStatus(transaction.reference, isSuccessful ? 'success' : 'failed', {
         ...transaction.metadata,
+        verification_identifier: identifier,
         verification_response: json,
       });
 
       if (isSuccessful) {
         await db.query('UPDATE orders SET paymentStatus = ?, status = ? WHERE id = ?', ['paid', 'processing', transaction.order_id]);
-        await db.query('UPDATE payments SET status = ? WHERE paymentIntentId = ?', ['success', reference]);
+        await db.query('UPDATE payments SET status = ? WHERE paymentIntentId = ?', ['success', transaction.reference]);
       }
 
-      logPayment('flutterwave.verify.success', { reference, isSuccessful });
+      logPayment('flutterwave.verify.success', { reference: txRef, verification_identifier: identifier, isSuccessful });
       return { success: isSuccessful, data: json.data };
     } catch (err: any) {
       if (err.name === 'AbortError') {
-        logPayment('flutterwave.verify.timeout', { reference });
+        logPayment('flutterwave.verify.timeout', { reference: identifier });
         throw new Error('Payment gateway timeout. Please try again.');
       }
-      logPayment('flutterwave.verify.error', { reference, error: err.message });
+      logPayment('flutterwave.verify.error', { reference: identifier, error: err.message });
       throw err;
     }
   }
