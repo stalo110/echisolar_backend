@@ -8,12 +8,13 @@ const http_1 = require("../utils/http");
 const db_1 = require("../config/db");
 const paymentLogger_1 = require("../utils/paymentLogger");
 const mailer_1 = require("../utils/mailer");
+const paymentEnv_1 = require("../utils/paymentEnv");
 class PaystackService {
     constructor(transactions, request = http_1.fetchWithTimeout) {
         this.transactions = transactions;
         this.request = request;
         this.baseUrl = 'https://api.paystack.co';
-        this.secretKey = process.env.PAYSTACK_SECRET_KEY || '';
+        this.secretKey = (0, paymentEnv_1.getEnvValue)('PAYSTACK_SECRET_KEY', 'PAYSTACK_LIVE_SECRET_KEY', 'PAYSTACK_SECRET_KEY_LIVE');
     }
     async initialize(order, email, currency, metadata = {}, options = {}) {
         if (!this.secretKey)

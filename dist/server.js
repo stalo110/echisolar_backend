@@ -6,6 +6,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const app_1 = __importDefault(require("./app"));
 const db_1 = require("./config/db");
 const runMigrations_1 = require("./migrations/runMigrations");
+const paymentEnv_1 = require("./utils/paymentEnv");
 const PORT = process.env.PORT || 5000;
 (async () => {
     try {
@@ -13,6 +14,8 @@ const PORT = process.env.PORT || 5000;
         console.log('Connected to MySQL');
         await (0, runMigrations_1.runMigrations)({ alter: true });
         console.log('Migrations completed');
+        const paymentEnv = (0, paymentEnv_1.getPaymentEnvironmentSummary)();
+        console.log(`Payment env: paystack=${paymentEnv.paystack.secretMode} flutterwave=${paymentEnv.flutterwave.secretMode}`);
         app_1.default.listen(PORT, () => console.log(`Server running on port ${PORT}`));
     }
     catch (err) {

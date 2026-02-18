@@ -4,6 +4,7 @@ exports.getPaymentConfig = exports.getTransactionByReference = exports.verifyPay
 const db_1 = require("../config/db");
 const paymentFactory_1 = require("../services/paymentFactory");
 const paymentLogger_1 = require("../utils/paymentLogger");
+const paymentEnv_1 = require("../utils/paymentEnv");
 const dispatcher = (0, paymentFactory_1.createPaymentDispatcher)();
 const { transactions, paystack, flutterwave } = (0, paymentFactory_1.createPaymentServices)();
 const getBackendBaseUrl = (req) => {
@@ -199,14 +200,22 @@ const getTransactionByReference = async (req, res) => {
 };
 exports.getTransactionByReference = getTransactionByReference;
 const getPaymentConfig = async (_req, res) => {
-    const paystackPublicKey = process.env.PAYSTACK_PUBLIC_KEY || '';
-    const flutterwavePublicKey = process.env.FLUTTERWAVE_PUBLIC_KEY || '';
-    (0, paymentLogger_1.logPayment)('config.fetch', { paystack: Boolean(paystackPublicKey), flutterwave: Boolean(flutterwavePublicKey) });
+    const paystackPublicKey = (0, paymentEnv_1.getEnvValue)('PAYSTACK_PUBLIC_KEY', 'PAYSTACK_LIVE_PUBLIC_KEY', 'PAYSTACK_PUBLIC_KEY_LIVE');
+    const flutterwavePublicKey = (0, paymentEnv_1.getEnvValue)('FLUTTERWAVE_PUBLIC_KEY', 'FLUTTERWAVE_LIVE_PUBLIC_KEY', 'FLUTTERWAVE_PUBLIC_KEY_LIVE', 'FLW_PUBLIC_KEY');
+    const summary = (0, paymentEnv_1.getPaymentEnvironmentSummary)();
+    (0, paymentLogger_1.logPayment)('config.fetch', {
+        paystack: Boolean(paystackPublicKey),
+        flutterwave: Boolean(flutterwavePublicKey),
+        paystack_mode: summary.paystack.secretMode,
+        flutterwave_mode: summary.flutterwave.secretMode,
+    });
     return res.json({
         ok: true,
         data: {
             paystackPublicKey,
             flutterwavePublicKey,
+            paystackMode: summary.paystack.secretMode,
+            flutterwaveMode: summary.flutterwave.secretMode,
         },
     });
 };

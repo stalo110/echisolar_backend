@@ -3,6 +3,7 @@ import { db } from '../config/db';
 import { createPaymentDispatcher, createPaymentServices } from '../services/paymentFactory';
 import { logPayment } from '../utils/paymentLogger';
 import { TransactionGateway } from '../services/TransactionRepository';
+import { getEnvValue, getPaymentEnvironmentSummary } from '../utils/paymentEnv';
 
 const dispatcher = createPaymentDispatcher();
 const { transactions, paystack, flutterwave } = createPaymentServices();
@@ -213,16 +214,29 @@ export const getTransactionByReference = async (req: AuthReq, res: Response) => 
 };
 
 export const getPaymentConfig = async (_req: Request, res: Response) => {
-  const paystackPublicKey = process.env.PAYSTACK_PUBLIC_KEY || '';
-  const flutterwavePublicKey = process.env.FLUTTERWAVE_PUBLIC_KEY || '';
+  const paystackPublicKey = getEnvValue('PAYSTACK_PUBLIC_KEY', 'PAYSTACK_LIVE_PUBLIC_KEY', 'PAYSTACK_PUBLIC_KEY_LIVE');
+  const flutterwavePublicKey = getEnvValue(
+    'FLUTTERWAVE_PUBLIC_KEY',
+    'FLUTTERWAVE_LIVE_PUBLIC_KEY',
+    'FLUTTERWAVE_PUBLIC_KEY_LIVE',
+    'FLW_PUBLIC_KEY'
+  );
+  const summary = getPaymentEnvironmentSummary();
 
-  logPayment('config.fetch', { paystack: Boolean(paystackPublicKey), flutterwave: Boolean(flutterwavePublicKey) });
+  logPayment('config.fetch', {
+    paystack: Boolean(paystackPublicKey),
+    flutterwave: Boolean(flutterwavePublicKey),
+    paystack_mode: summary.paystack.secretMode,
+    flutterwave_mode: summary.flutterwave.secretMode,
+  });
 
   return res.json({
     ok: true,
     data: {
       paystackPublicKey,
       flutterwavePublicKey,
+      paystackMode: summary.paystack.secretMode,
+      flutterwaveMode: summary.flutterwave.secretMode,
     },
   });
 };

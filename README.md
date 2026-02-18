@@ -33,9 +33,9 @@ Express + TypeScript API for the EchiSolar React storefront. It manages MySQL da
 | `NODE_ENV` | `development` or `production`. |
 | `DB_*` | MySQL connection details. |
 | `JWT_SECRET` | Secret used to sign access tokens. |
-| `PAYSTACK_SECRET_KEY` / `PAYSTACK_PUBLIC_KEY` | Paystack API keys. |
+| `PAYSTACK_SECRET_KEY` / `PAYSTACK_PUBLIC_KEY` | Paystack API keys. Live aliases are also accepted: `PAYSTACK_LIVE_SECRET_KEY`, `PAYSTACK_LIVE_PUBLIC_KEY`. |
 | `PAYSTACK_WEBHOOK_SECRET` | Paystack webhook signing secret. |
-| `FLUTTERWAVE_SECRET_KEY` / `FLUTTERWAVE_PUBLIC_KEY` | Flutterwave API keys. |
+| `FLUTTERWAVE_SECRET_KEY` / `FLUTTERWAVE_PUBLIC_KEY` | Flutterwave API keys. Live aliases are also accepted: `FLUTTERWAVE_LIVE_SECRET_KEY`, `FLUTTERWAVE_LIVE_PUBLIC_KEY`. |
 | `FLUTTERWAVE_ENCRYPTION_KEY` / `FLUTTERWAVE_WEBHOOK_HASH` | Flutterwave webhook signature secrets. |
 | `SMTP_HOST` / `INCOMING_SERVER` | SMTP host (Nodemailer uses either). |
 | `SMTP_PORT` | SMTP port (usually 465 for SSL). |

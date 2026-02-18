@@ -4,6 +4,7 @@ import TransactionRepository, { TransactionGateway } from './TransactionReposito
 import { db } from '../config/db';
 import { logPayment } from '../utils/paymentLogger';
 import { sendPaymentSuccessNotificationsByOrder } from '../utils/mailer';
+import { getEnvValue } from '../utils/paymentEnv';
 
 export type OrderLike = { id: number; userId: number; totalAmount: number };
 export type FlutterwaveInitializeOptions = { paymentPlanId?: string; redirectUrl?: string };
@@ -17,8 +18,13 @@ export type CreateFlutterwavePlanInput = {
 
 class FlutterwaveService {
   private baseUrl = 'https://api.flutterwave.com/v3';
-  private secretKey = process.env.FLUTTERWAVE_SECRET_KEY || '';
-  private secretHash = process.env.FLUTTERWAVE_SECRET_HASH || process.env.FLUTTERWAVE_WEBHOOK_HASH || '';
+  private secretKey = getEnvValue(
+    'FLUTTERWAVE_SECRET_KEY',
+    'FLUTTERWAVE_LIVE_SECRET_KEY',
+    'FLUTTERWAVE_SECRET_KEY_LIVE',
+    'FLW_SECRET_KEY'
+  );
+  private secretHash = getEnvValue('FLUTTERWAVE_SECRET_HASH', 'FLUTTERWAVE_WEBHOOK_HASH');
 
   constructor(private transactions: TransactionRepository, private request = fetchWithTimeout) {}
 

@@ -8,13 +8,14 @@ const http_1 = require("../utils/http");
 const db_1 = require("../config/db");
 const paymentLogger_1 = require("../utils/paymentLogger");
 const mailer_1 = require("../utils/mailer");
+const paymentEnv_1 = require("../utils/paymentEnv");
 class FlutterwaveService {
     constructor(transactions, request = http_1.fetchWithTimeout) {
         this.transactions = transactions;
         this.request = request;
         this.baseUrl = 'https://api.flutterwave.com/v3';
-        this.secretKey = process.env.FLUTTERWAVE_SECRET_KEY || '';
-        this.secretHash = process.env.FLUTTERWAVE_SECRET_HASH || process.env.FLUTTERWAVE_WEBHOOK_HASH || '';
+        this.secretKey = (0, paymentEnv_1.getEnvValue)('FLUTTERWAVE_SECRET_KEY', 'FLUTTERWAVE_LIVE_SECRET_KEY', 'FLUTTERWAVE_SECRET_KEY_LIVE', 'FLW_SECRET_KEY');
+        this.secretHash = (0, paymentEnv_1.getEnvValue)('FLUTTERWAVE_SECRET_HASH', 'FLUTTERWAVE_WEBHOOK_HASH');
     }
     async initialize(order, email, currency, metadata = {}, options = {}) {
         if (!this.secretKey)

@@ -4,6 +4,7 @@ import TransactionRepository, { TransactionGateway } from './TransactionReposito
 import { db } from '../config/db';
 import { logPayment } from '../utils/paymentLogger';
 import { sendPaymentSuccessNotificationsByOrder } from '../utils/mailer';
+import { getEnvValue } from '../utils/paymentEnv';
 
 export type OrderLike = { id: number; userId: number; totalAmount: number };
 export type PaystackInitializeOptions = { planCode?: string; callbackUrl?: string };
@@ -17,7 +18,7 @@ export type CreatePaystackPlanInput = {
 
 class PaystackService {
   private baseUrl = 'https://api.paystack.co';
-  private secretKey = process.env.PAYSTACK_SECRET_KEY || '';
+  private secretKey = getEnvValue('PAYSTACK_SECRET_KEY', 'PAYSTACK_LIVE_SECRET_KEY', 'PAYSTACK_SECRET_KEY_LIVE');
 
   constructor(private transactions: TransactionRepository, private request = fetchWithTimeout) {}
 
