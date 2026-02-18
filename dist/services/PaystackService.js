@@ -21,12 +21,13 @@ class PaystackService {
         while (await this.transactions.exists(reference)) {
             reference = `${reference}-${Date.now()}`;
         }
+        const defaultCallback = `${process.env.APP_URL || process.env.BACKEND_PUBLIC_URL || process.env.FRONTEND_URL || ''}/verify-payment?gateway=paystack`;
         const payload = {
             email,
             amount: Math.round(order.totalAmount * 100),
             currency: String(currency || 'NGN').toUpperCase(),
             reference,
-            callback_url: `${process.env.APP_URL || process.env.FRONTEND_URL || ''}/verify-payment?gateway=paystack`,
+            callback_url: options.callbackUrl || defaultCallback,
             metadata: { order_id: order.id, ...metadata },
             ...(options.planCode ? { plan: options.planCode } : {}),
         };

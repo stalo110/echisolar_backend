@@ -13,6 +13,22 @@ const toAmount = (value: unknown) => {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : 0;
 };
+const getBackendBaseUrl = (req: Request) => {
+  const explicit =
+    process.env.PAYMENT_VERIFY_BASE_URL ||
+    process.env.APP_URL ||
+    process.env.BACKEND_PUBLIC_URL;
+  if (explicit) return String(explicit).replace(/\/$/, '');
+  const proto =
+    String(req.headers['x-forwarded-proto'] || '')
+      .split(',')[0]
+      .trim() || req.protocol;
+  const host =
+    String(req.headers['x-forwarded-host'] || '')
+      .split(',')[0]
+      .trim() || req.get('host') || '';
+  return host ? `${proto}://${host}` : '';
+};
 
 const upsertGatewaySubscription = async (params: {
   orderId: number;
@@ -62,6 +78,10 @@ export const initiateCheckout: RequestHandler = async (req, res) => {
   const userId = getOrderUserId(req);
   const { shippingAddressId, providerPreference = 'AUTO', planOption = 'full', currency = 'usd' } = req.body;
   try {
+    const backendBaseUrl = getBackendBaseUrl(req);
+    const paystackCallbackUrl = `${backendBaseUrl}/verify-payment?gateway=paystack`;
+    const flutterwaveRedirectUrl = `${backendBaseUrl}/verify-payment?gateway=flutterwave`;
+
     const [cartRows] = await db.query('SELECT id FROM carts WHERE userId = ?', [userId]);
     const cart = (cartRows as any[])[0];
     if (!cart) return res.status(400).json({ error: 'Cart empty' });
@@ -188,7 +208,7 @@ export const initiateCheckout: RequestHandler = async (req, res) => {
           userEmail,
           normalizedCurrency,
           planMetadata,
-          { paymentPlanId: recurringPlan.paymentPlanId }
+          { paymentPlanId: recurringPlan.paymentPlanId, redirectUrl: flutterwaveRedirectUrl }
         );
         await db.query('INSERT INTO payments (orderId, provider, paymentIntentId, amount, currency, status) VALUES (?,?,?,?,?,?)', [
           orderId,
@@ -215,7 +235,7 @@ export const initiateCheckout: RequestHandler = async (req, res) => {
           userEmail,
           normalizedCurrency,
           planMetadata,
-          { planCode: recurringPlan.planCode }
+          { planCode: recurringPlan.planCode, callbackUrl: paystackCallbackUrl }
         );
         await db.query('INSERT INTO payments (orderId, provider, paymentIntentId, amount, currency, status) VALUES (?,?,?,?,?,?)', [
           orderId,
@@ -242,7 +262,9 @@ export const initiateCheckout: RequestHandler = async (req, res) => {
           { id: orderId, userId, totalAmount: total },
           'flutterwave',
           userEmail,
-          normalizedCurrency
+          normalizedCurrency,
+          {},
+          { redirectUrl: flutterwaveRedirectUrl }
         );
         await db.query('INSERT INTO payments (orderId, provider, paymentIntentId, amount, currency, status) VALUES (?,?,?,?,?,?)', [
           orderId,
@@ -266,7 +288,9 @@ export const initiateCheckout: RequestHandler = async (req, res) => {
           { id: orderId, userId, totalAmount: total },
           'paystack',
           userEmail,
-          normalizedCurrency
+          normalizedCurrency,
+          {},
+          { callbackUrl: paystackCallbackUrl }
         );
         await db.query('INSERT INTO payments (orderId, provider, paymentIntentId, amount, currency, status) VALUES (?,?,?,?,?,?)', [
           orderId,

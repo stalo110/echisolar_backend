@@ -5,7 +5,7 @@ import { db } from '../config/db';
 import { logPayment } from '../utils/paymentLogger';
 
 export type OrderLike = { id: number; userId: number; totalAmount: number };
-export type PaystackInitializeOptions = { planCode?: string };
+export type PaystackInitializeOptions = { planCode?: string; callbackUrl?: string };
 export type CreatePaystackPlanInput = {
   name: string;
   amount: number;
@@ -34,12 +34,13 @@ class PaystackService {
       reference = `${reference}-${Date.now()}`;
     }
 
+    const defaultCallback = `${process.env.APP_URL || process.env.BACKEND_PUBLIC_URL || process.env.FRONTEND_URL || ''}/verify-payment?gateway=paystack`;
     const payload = {
       email,
       amount: Math.round(order.totalAmount * 100),
       currency: String(currency || 'NGN').toUpperCase(),
       reference,
-      callback_url: `${process.env.APP_URL || process.env.FRONTEND_URL || ''}/verify-payment?gateway=paystack`,
+      callback_url: options.callbackUrl || defaultCallback,
       metadata: { order_id: order.id, ...metadata },
       ...(options.planCode ? { plan: options.planCode } : {}),
     };

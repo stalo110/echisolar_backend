@@ -21,7 +21,12 @@ class PaymentDispatcher {
     email: string,
     currency: string,
     metadata: Record<string, any> = {},
-    options: { planCode?: string; paymentPlanId?: string } = {}
+    options: {
+      planCode?: string;
+      paymentPlanId?: string;
+      callbackUrl?: string;
+      redirectUrl?: string;
+    } = {}
   ) {
     logPayment('initiate.start', { orderId: order.id, gateway, email });
 
@@ -29,10 +34,12 @@ class PaymentDispatcher {
       case 'paystack':
         return this.paystackService.initialize(order, email, currency, metadata, {
           planCode: options.planCode,
+          callbackUrl: options.callbackUrl,
         });
       case 'flutterwave':
         return this.flutterwaveService.initialize(order, email, currency, metadata, {
           paymentPlanId: options.paymentPlanId,
+          redirectUrl: options.redirectUrl,
         });
       default:
         throw new Error(`Unsupported gateway: ${gateway}`);
