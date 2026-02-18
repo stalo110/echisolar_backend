@@ -8,6 +8,22 @@ const dispatcher = createPaymentDispatcher();
 const { transactions, paystack, flutterwave } = createPaymentServices();
 
 type AuthReq = Request & { user?: { userId: number; role: string; email?: string } };
+const getBackendBaseUrl = (req: Request) => {
+  const explicit =
+    process.env.PAYMENT_VERIFY_BASE_URL ||
+    process.env.APP_URL ||
+    process.env.BACKEND_PUBLIC_URL;
+  if (explicit) return String(explicit).replace(/\/$/, '');
+  const proto =
+    String(req.headers['x-forwarded-proto'] || '')
+      .split(',')[0]
+      .trim() || req.protocol;
+  const host =
+    String(req.headers['x-forwarded-host'] || '')
+      .split(',')[0]
+      .trim() || req.get('host') || '';
+  return host ? `${proto}://${host}` : '';
+};
 
 export const initializePayment = async (req: AuthReq, res: Response) => {
   try {
@@ -27,12 +43,19 @@ export const initializePayment = async (req: AuthReq, res: Response) => {
 
     const userEmail = email || req.user?.email;
     if (!userEmail) return res.status(400).json({ error: 'Email is required' });
+    const backendBaseUrl = getBackendBaseUrl(req);
+    const paystackCallbackUrl = `${backendBaseUrl}/verify-payment?gateway=paystack`;
+    const flutterwaveRedirectUrl = `${backendBaseUrl}/verify-payment?gateway=flutterwave`;
 
     const result = await dispatcher.initiate(
       { id: order.id, userId: order.userId, totalAmount: Number(order.totalAmount) },
       gateway,
       userEmail,
-      currency
+      currency,
+      {},
+      gateway === 'paystack'
+        ? { callbackUrl: paystackCallbackUrl }
+        : { redirectUrl: flutterwaveRedirectUrl }
     );
 
     const reference = (result as any).reference;

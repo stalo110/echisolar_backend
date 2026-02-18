@@ -5,7 +5,7 @@ import { db } from '../config/db';
 import { logPayment } from '../utils/paymentLogger';
 
 export type OrderLike = { id: number; userId: number; totalAmount: number };
-export type FlutterwaveInitializeOptions = { paymentPlanId?: string };
+export type FlutterwaveInitializeOptions = { paymentPlanId?: string; redirectUrl?: string };
 export type CreateFlutterwavePlanInput = {
   name: string;
   amount: number;
@@ -35,11 +35,12 @@ class FlutterwaveService {
       reference = `${reference}-${Date.now()}`;
     }
 
+    const defaultRedirect = `${process.env.APP_URL || process.env.BACKEND_PUBLIC_URL || process.env.FRONTEND_URL || ''}/verify-payment?gateway=flutterwave`;
     const payload = {
       tx_ref: reference,
       amount: Number(order.totalAmount),
       currency: String(currency || 'NGN').toUpperCase(),
-      redirect_url: `${process.env.APP_URL || process.env.FRONTEND_URL || ''}/verify-payment?gateway=flutterwave`,
+      redirect_url: options.redirectUrl || defaultRedirect,
       customer: { email },
       meta: { order_id: order.id, ...metadata },
       ...(options.paymentPlanId ? { payment_plan: options.paymentPlanId } : {}),

@@ -6,6 +6,20 @@ const paymentFactory_1 = require("../services/paymentFactory");
 const paymentLogger_1 = require("../utils/paymentLogger");
 const dispatcher = (0, paymentFactory_1.createPaymentDispatcher)();
 const { transactions, paystack, flutterwave } = (0, paymentFactory_1.createPaymentServices)();
+const getBackendBaseUrl = (req) => {
+    const explicit = process.env.PAYMENT_VERIFY_BASE_URL ||
+        process.env.APP_URL ||
+        process.env.BACKEND_PUBLIC_URL;
+    if (explicit)
+        return String(explicit).replace(/\/$/, '');
+    const proto = String(req.headers['x-forwarded-proto'] || '')
+        .split(',')[0]
+        .trim() || req.protocol;
+    const host = String(req.headers['x-forwarded-host'] || '')
+        .split(',')[0]
+        .trim() || req.get('host') || '';
+    return host ? `${proto}://${host}` : '';
+};
 const initializePayment = async (req, res) => {
     try {
         const { orderId, gateway, email, currency = 'NGN' } = req.body;
@@ -20,7 +34,12 @@ const initializePayment = async (req, res) => {
         const userEmail = email || req.user?.email;
         if (!userEmail)
             return res.status(400).json({ error: 'Email is required' });
-        const result = await dispatcher.initiate({ id: order.id, userId: order.userId, totalAmount: Number(order.totalAmount) }, gateway, userEmail, currency);
+        const backendBaseUrl = getBackendBaseUrl(req);
+        const paystackCallbackUrl = `${backendBaseUrl}/verify-payment?gateway=paystack`;
+        const flutterwaveRedirectUrl = `${backendBaseUrl}/verify-payment?gateway=flutterwave`;
+        const result = await dispatcher.initiate({ id: order.id, userId: order.userId, totalAmount: Number(order.totalAmount) }, gateway, userEmail, currency, {}, gateway === 'paystack'
+            ? { callbackUrl: paystackCallbackUrl }
+            : { redirectUrl: flutterwaveRedirectUrl });
         const reference = result.reference;
         await db_1.db.query('INSERT INTO payments (orderId, provider, paymentIntentId, amount, currency, status) VALUES (?,?,?,?,?,?)', [
             orderId,

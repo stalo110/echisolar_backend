@@ -12,6 +12,20 @@ const toAmount = (value) => {
     const parsed = Number(value);
     return Number.isFinite(parsed) ? parsed : 0;
 };
+const getBackendBaseUrl = (req) => {
+    const explicit = process.env.PAYMENT_VERIFY_BASE_URL ||
+        process.env.APP_URL ||
+        process.env.BACKEND_PUBLIC_URL;
+    if (explicit)
+        return String(explicit).replace(/\/$/, '');
+    const proto = String(req.headers['x-forwarded-proto'] || '')
+        .split(',')[0]
+        .trim() || req.protocol;
+    const host = String(req.headers['x-forwarded-host'] || '')
+        .split(',')[0]
+        .trim() || req.get('host') || '';
+    return host ? `${proto}://${host}` : '';
+};
 const upsertGatewaySubscription = async (params) => {
     const planReference = String(params.planReference || '').trim();
     if (!planReference)
@@ -41,6 +55,9 @@ const initiateCheckout = async (req, res) => {
     const userId = getOrderUserId(req);
     const { shippingAddressId, providerPreference = 'AUTO', planOption = 'full', currency = 'usd' } = req.body;
     try {
+        const backendBaseUrl = getBackendBaseUrl(req);
+        const paystackCallbackUrl = `${backendBaseUrl}/verify-payment?gateway=paystack`;
+        const flutterwaveRedirectUrl = `${backendBaseUrl}/verify-payment?gateway=flutterwave`;
         const [cartRows] = await db_1.db.query('SELECT id FROM carts WHERE userId = ?', [userId]);
         const cart = cartRows[0];
         if (!cart)
@@ -148,7 +165,7 @@ const initiateCheckout = async (req, res) => {
                 },
             });
             if (provider === 'flutterwave') {
-                const data = await paymentDispatcher.initiate({ id: orderId, userId, totalAmount: first.amount }, 'flutterwave', userEmail, normalizedCurrency, planMetadata, { paymentPlanId: recurringPlan.paymentPlanId });
+                const data = await paymentDispatcher.initiate({ id: orderId, userId, totalAmount: first.amount }, 'flutterwave', userEmail, normalizedCurrency, planMetadata, { paymentPlanId: recurringPlan.paymentPlanId, redirectUrl: flutterwaveRedirectUrl });
                 await db_1.db.query('INSERT INTO payments (orderId, provider, paymentIntentId, amount, currency, status) VALUES (?,?,?,?,?,?)', [
                     orderId,
                     'flutterwave',
@@ -169,7 +186,7 @@ const initiateCheckout = async (req, res) => {
                 });
             }
             else {
-                const data = await paymentDispatcher.initiate({ id: orderId, userId, totalAmount: first.amount }, 'paystack', userEmail, normalizedCurrency, planMetadata, { planCode: recurringPlan.planCode });
+                const data = await paymentDispatcher.initiate({ id: orderId, userId, totalAmount: first.amount }, 'paystack', userEmail, normalizedCurrency, planMetadata, { planCode: recurringPlan.planCode, callbackUrl: paystackCallbackUrl });
                 await db_1.db.query('INSERT INTO payments (orderId, provider, paymentIntentId, amount, currency, status) VALUES (?,?,?,?,?,?)', [
                     orderId,
                     'paystack',
@@ -192,7 +209,7 @@ const initiateCheckout = async (req, res) => {
         }
         else {
             if (provider === 'flutterwave') {
-                const data = await paymentDispatcher.initiate({ id: orderId, userId, totalAmount: total }, 'flutterwave', userEmail, normalizedCurrency);
+                const data = await paymentDispatcher.initiate({ id: orderId, userId, totalAmount: total }, 'flutterwave', userEmail, normalizedCurrency, {}, { redirectUrl: flutterwaveRedirectUrl });
                 await db_1.db.query('INSERT INTO payments (orderId, provider, paymentIntentId, amount, currency, status) VALUES (?,?,?,?,?,?)', [
                     orderId,
                     'flutterwave',
@@ -212,7 +229,7 @@ const initiateCheckout = async (req, res) => {
                 });
             }
             else {
-                const data = await paymentDispatcher.initiate({ id: orderId, userId, totalAmount: total }, 'paystack', userEmail, normalizedCurrency);
+                const data = await paymentDispatcher.initiate({ id: orderId, userId, totalAmount: total }, 'paystack', userEmail, normalizedCurrency, {}, { callbackUrl: paystackCallbackUrl });
                 await db_1.db.query('INSERT INTO payments (orderId, provider, paymentIntentId, amount, currency, status) VALUES (?,?,?,?,?,?)', [
                     orderId,
                     'paystack',

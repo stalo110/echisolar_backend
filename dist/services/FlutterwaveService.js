@@ -22,11 +22,12 @@ class FlutterwaveService {
         while (await this.transactions.exists(reference)) {
             reference = `${reference}-${Date.now()}`;
         }
+        const defaultRedirect = `${process.env.APP_URL || process.env.BACKEND_PUBLIC_URL || process.env.FRONTEND_URL || ''}/verify-payment?gateway=flutterwave`;
         const payload = {
             tx_ref: reference,
             amount: Number(order.totalAmount),
             currency: String(currency || 'NGN').toUpperCase(),
-            redirect_url: `${process.env.APP_URL || process.env.FRONTEND_URL || ''}/verify-payment?gateway=flutterwave`,
+            redirect_url: options.redirectUrl || defaultRedirect,
             customer: { email },
             meta: { order_id: order.id, ...metadata },
             ...(options.paymentPlanId ? { payment_plan: options.paymentPlanId } : {}),
