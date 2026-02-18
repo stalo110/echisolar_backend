@@ -79,35 +79,79 @@ export const initializePayment = async (req: AuthReq, res: Response) => {
 export const verifyPayment = async (req: Request, res: Response) => {
   const rawSearch = String(req.originalUrl || '').split('?')[1] || '';
   const rawParams = new URLSearchParams(rawSearch);
+  const normalizeKey = (key: string) =>
+    String(key || '')
+      .trim()
+      .toLowerCase()
+      .replace(/[\s-]+/g, '_');
+  const compactKey = (key: string) => normalizeKey(key).replace(/_/g, '');
+
+  const valuesByKey = new Map<string, string>();
+  const setValue = (rawKey: string, rawValue: unknown) => {
+    if (rawValue === null || rawValue === undefined) return;
+    const key = normalizeKey(rawKey);
+    if (!key) return;
+    const value = String(rawValue).trim();
+    if (!value) return;
+    const compact = compactKey(key);
+
+    if (!valuesByKey.has(key)) valuesByKey.set(key, value);
+    if (!valuesByKey.has(compact)) valuesByKey.set(compact, value);
+  };
+
+  for (const [key, rawValue] of Object.entries((req.query || {}) as Record<string, unknown>)) {
+    if (Array.isArray(rawValue)) {
+      for (const value of rawValue) setValue(key, value);
+    } else {
+      setValue(key, rawValue);
+    }
+  }
+
+  for (const [key, value] of rawParams.entries()) {
+    setValue(key, value);
+  }
+
   const pick = (...keys: string[]) => {
     for (const key of keys) {
-      const direct = (req.query as any)?.[key];
-      if (Array.isArray(direct) && direct.length) {
-        const value = String(direct[0] || '').trim();
-        if (value) return value;
-      }
-      if (typeof direct === 'string') {
-        const value = String(direct).trim();
-        if (value) return value;
-      }
-      const raw = rawParams.get(key);
-      if (raw && String(raw).trim()) return String(raw).trim();
+      const normalized = normalizeKey(key);
+      const compact = compactKey(key);
+      const value = valuesByKey.get(normalized) || valuesByKey.get(compact);
+      if (value) return value;
     }
     return '';
   };
 
-  const reference = pick('reference', 'ref', 'tx_ref');
-  const transactionId = pick('transaction_id');
-  let gateway = pick('gateway') as TransactionGateway;
+  const normalizeGateway = (value: string): TransactionGateway | '' => {
+    const normalized = normalizeKey(value);
+    if (normalized === 'paystack' || normalized === 'pay_stack') return 'paystack';
+    if (normalized === 'flutterwave' || normalized === 'flutter_wave' || normalized === 'flw') return 'flutterwave';
+    return '';
+  };
+
+  const reference = pick('reference', 'ref', 'tx_ref', 'txref', 'trxref');
+  const transactionId = pick('transaction_id', 'transactionid', 'flw_transaction_id');
+  const gatewayInput = pick('gateway', 'payment_gateway', 'provider');
+  let gateway = normalizeGateway(gatewayInput);
   if (!gateway) {
-    if (reference.startsWith('PAY-')) gateway = 'paystack';
-    else if (reference.startsWith('FLW-') || transactionId) gateway = 'flutterwave';
+    const upperRef = reference.toUpperCase();
+    if (upperRef.startsWith('PAY-')) gateway = 'paystack';
+    else if (upperRef.startsWith('FLW-') || transactionId) gateway = 'flutterwave';
   }
 
   const verificationReference = gateway === 'flutterwave' ? transactionId || reference : reference;
   const redirectReference = reference || transactionId || '';
 
   if (!verificationReference || !gateway) {
+    logPayment('verify.endpoint.missing_params', {
+      rawSearch,
+      parsed: {
+        reference,
+        transactionId,
+        gatewayInput,
+        gateway,
+      },
+      queryKeys: Object.keys((req.query || {}) as Record<string, unknown>),
+    });
     return res.status(400).json({ error: 'Reference and gateway are required' });
   }
 
