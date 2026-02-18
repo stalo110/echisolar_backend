@@ -59,9 +59,36 @@ const initializePayment = async (req, res) => {
 };
 exports.initializePayment = initializePayment;
 const verifyPayment = async (req, res) => {
-    const reference = String(req.query.reference || req.query.ref || req.query.tx_ref || '').trim();
-    const transactionId = String(req.query.transaction_id || '').trim();
-    const gateway = String(req.query.gateway || '').trim();
+    const rawSearch = String(req.originalUrl || '').split('?')[1] || '';
+    const rawParams = new URLSearchParams(rawSearch);
+    const pick = (...keys) => {
+        for (const key of keys) {
+            const direct = req.query?.[key];
+            if (Array.isArray(direct) && direct.length) {
+                const value = String(direct[0] || '').trim();
+                if (value)
+                    return value;
+            }
+            if (typeof direct === 'string') {
+                const value = String(direct).trim();
+                if (value)
+                    return value;
+            }
+            const raw = rawParams.get(key);
+            if (raw && String(raw).trim())
+                return String(raw).trim();
+        }
+        return '';
+    };
+    const reference = pick('reference', 'ref', 'tx_ref');
+    const transactionId = pick('transaction_id');
+    let gateway = pick('gateway');
+    if (!gateway) {
+        if (reference.startsWith('PAY-'))
+            gateway = 'paystack';
+        else if (reference.startsWith('FLW-') || transactionId)
+            gateway = 'flutterwave';
+    }
     const verificationReference = gateway === 'flutterwave' ? transactionId || reference : reference;
     const redirectReference = reference || transactionId || '';
     if (!verificationReference || !gateway) {
