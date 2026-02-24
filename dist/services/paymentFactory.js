@@ -3,7 +3,8 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.createPaymentServices = exports.createPaymentDispatcher = void 0;
+exports.createPaymentDispatcher = createPaymentDispatcher;
+exports.createPaymentServices = createPaymentServices;
 const TransactionRepository_1 = __importDefault(require("./TransactionRepository"));
 const PaystackService_1 = __importDefault(require("./PaystackService"));
 const FlutterwaveService_1 = __importDefault(require("./FlutterwaveService"));
@@ -14,7 +15,6 @@ function createPaymentDispatcher() {
     const flutterwave = new FlutterwaveService_1.default(transactions);
     return new PaymentDispatcher_1.default(paystack, flutterwave);
 }
-exports.createPaymentDispatcher = createPaymentDispatcher;
 function createPaymentServices() {
     const transactions = new TransactionRepository_1.default();
     return {
@@ -23,5 +23,4 @@ function createPaymentServices() {
         flutterwave: new FlutterwaveService_1.default(transactions),
     };
 }
-exports.createPaymentServices = createPaymentServices;
 //# sourceMappingURL=paymentFactory.js.map

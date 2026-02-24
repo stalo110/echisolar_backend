@@ -12,9 +12,12 @@ import { verifyPayment } from './controllers/paymentController';
 dotenv.config();
 
 const app = express();
+const allowedOrigins = [process.env.FRONTEND_URL, 'http://localhost:5173/'].filter(
+  (origin): origin is string => Boolean(origin)
+);
 
 app.use(helmet());
-app.use(cors({ origin: process.env.FRONTEND_URL || true }));
+app.use(cors({ origin: allowedOrigins.length ? allowedOrigins : true }));
 app.use(morgan('dev'));
 
 // capture the raw body for webhook signature verification

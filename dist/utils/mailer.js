@@ -3,7 +3,8 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.sendContactReplyEmail = exports.sendPaymentSuccessNotificationsByOrder = exports.sendPaymentSuccessNotifications = exports.sendWelcomeEmail = exports.notifyOrderStakeholders = exports.hasPaymentConfirmationEmailLog = void 0;
+exports.sendContactReplyEmail = exports.sendPaymentSuccessNotificationsByOrder = exports.sendPaymentSuccessNotifications = exports.sendWelcomeEmail = exports.hasPaymentConfirmationEmailLog = void 0;
+exports.notifyOrderStakeholders = notifyOrderStakeholders;
 const nodemailer_1 = __importDefault(require("nodemailer"));
 const dotenv_1 = __importDefault(require("dotenv"));
 const db_1 = require("../config/db");
@@ -170,7 +171,6 @@ async function notifyOrderStakeholders(options) {
         });
     }
 }
-exports.notifyOrderStakeholders = notifyOrderStakeholders;
 const sendWelcomeEmail = async (params) => {
     const name = String(params.name || '').trim() || 'there';
     const email = String(params.email || '').trim();

@@ -240,9 +240,31 @@ export const updatePackage = async (req: any, res: Response) => {
 };
 
 export const deletePackage: RequestHandler = async (req, res) => {
+  const packageId = Number(req.params.id);
+  if (!Number.isFinite(packageId) || packageId < 1) {
+    return res.status(400).json({ error: 'Invalid package id' });
+  }
+
   try {
-    await db.query('UPDATE packages SET isActive = FALSE WHERE id = ?', [req.params.id]);
-    res.json({ message: 'Package archived' });
+    const [orderRefRows] = await db.query(
+      'SELECT COUNT(*) AS total FROM orderItems WHERE packageId = ?',
+      [packageId]
+    );
+    const totalOrderRefs = Number((orderRefRows as any[])[0]?.total || 0);
+    if (totalOrderRefs > 0) {
+      return res
+        .status(409)
+        .json({ error: 'Package cannot be deleted because it is linked to existing orders.' });
+    }
+
+    await db.query("DELETE FROM cartItems WHERE packageId = ? AND itemType = 'package'", [packageId]);
+
+    const [result] = await db.query('DELETE FROM packages WHERE id = ?', [packageId]);
+    if (Number((result as any).affectedRows || 0) === 0) {
+      return res.status(404).json({ error: 'Package not found' });
+    }
+
+    res.json({ message: 'Package deleted' });
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: 'Server error' });
