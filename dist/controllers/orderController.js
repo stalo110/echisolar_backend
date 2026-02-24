@@ -12,6 +12,81 @@ const toAmount = (value) => {
     const parsed = Number(value);
     return Number.isFinite(parsed) ? parsed : 0;
 };
+const toBoolean = (value, fallback = false) => {
+    if (typeof value === 'boolean')
+        return value;
+    if (typeof value === 'number')
+        return value === 1;
+    if (typeof value === 'string') {
+        const normalized = value.trim().toLowerCase();
+        if (normalized === 'true' || normalized === '1')
+            return true;
+        if (normalized === 'false' || normalized === '0')
+            return false;
+    }
+    return fallback;
+};
+const normalizeItemType = (value) => String(value || '').toLowerCase() === 'package' ? 'package' : 'product';
+const mapCheckoutCartItem = (row) => {
+    const itemType = normalizeItemType(row.itemType);
+    const isPackage = itemType === 'package';
+    const name = isPackage ? row.packageName : row.productName;
+    const unitPrice = isPackage ? toAmount(row.packageUnitPrice) : toAmount(row.productUnitPrice);
+    const productId = isPackage ? null : Number(row.productId || 0) || null;
+    const packageId = isPackage ? Number(row.packageId || 0) || null : null;
+    const quantity = isPackage ? 1 : Math.max(1, toAmount(row.quantity));
+    const stock = isPackage ? null : toAmount(row.productStock);
+    const requiresCustomPrice = isPackage ? toBoolean(row.packageRequiresCustomPrice) : false;
+    if (!name || !Number.isFinite(unitPrice) || unitPrice <= 0)
+        return null;
+    return {
+        itemType,
+        productId,
+        packageId,
+        quantity,
+        name: String(name),
+        unitPrice,
+        stock,
+        requiresCustomPrice,
+    };
+};
+const ORDER_ITEMS_QUERY = `
+  SELECT
+    oi.id,
+    oi.orderId,
+    oi.productId,
+    oi.packageId,
+    oi.itemType,
+    oi.quantity,
+    oi.unitPrice,
+    COALESCE(p.name, pk.name) AS name,
+    COALESCE(p.images, pk.images) AS images
+  FROM orderItems oi
+  LEFT JOIN products p ON oi.itemType = 'product' AND p.id = oi.productId
+  LEFT JOIN packages pk ON oi.itemType = 'package' AND pk.id = oi.packageId
+  WHERE oi.orderId = ?
+  ORDER BY oi.id ASC
+`;
+const syncPackageEnrollmentsForOrder = async (params) => {
+    for (const item of params.items) {
+        if (item.itemType !== 'package' || !item.packageId)
+            continue;
+        const [rows] = await db_1.db.query(`SELECT id
+       FROM userPackageEnrollments
+       WHERE userId = ? AND packageId = ? AND (orderId = ? OR orderId IS NULL)
+       ORDER BY id DESC
+       LIMIT 1`, [params.userId, item.packageId, params.orderId]);
+        const existing = rows[0];
+        if (existing) {
+            await db_1.db.query(`UPDATE userPackageEnrollments
+         SET orderId = ?, status = 'pending_payment', source = 'cart_checkout', selectedPrice = ?, updatedAt = NOW()
+         WHERE id = ?`, [params.orderId, item.unitPrice, existing.id]);
+            continue;
+        }
+        await db_1.db.query(`INSERT INTO userPackageEnrollments (userId, packageId, orderId, status, source, selectedPrice)
+       VALUES (?,?,?,?,?,?)`, [params.userId, item.packageId, params.orderId, 'pending_payment', 'cart_checkout', item.unitPrice]);
+    }
+};
 const getBackendBaseUrl = (req) => {
     const explicit = process.env.PAYMENT_VERIFY_BASE_URL ||
         process.env.APP_URL ||
@@ -62,14 +137,41 @@ const initiateCheckout = async (req, res) => {
         const cart = cartRows[0];
         if (!cart)
             return res.status(400).json({ error: 'Cart empty' });
-        const [items] = await db_1.db.query(`SELECT ci.id, ci.quantity, p.id as productId, p.name, COALESCE(p.salePrice,p.price) as unitPrice, p.stock
-       FROM cartItems ci JOIN products p ON p.id = ci.productId WHERE ci.cartId = ?`, [cart.id]);
-        const cartItems = items;
+        const [rows] = await db_1.db.query(`SELECT
+         ci.id,
+         ci.itemType,
+         ci.quantity,
+         ci.productId,
+         ci.packageId,
+         p.name AS productName,
+         COALESCE(p.salePrice, p.price) AS productUnitPrice,
+         p.stock AS productStock,
+         pk.name AS packageName,
+         pk.price AS packageUnitPrice,
+         pk.requiresCustomPrice AS packageRequiresCustomPrice
+       FROM cartItems ci
+       LEFT JOIN products p ON ci.itemType = 'product' AND p.id = ci.productId AND p.isActive = TRUE
+       LEFT JOIN packages pk ON ci.itemType = 'package' AND pk.id = ci.packageId AND pk.isActive = TRUE
+       WHERE ci.cartId = ?`, [cart.id]);
+        const sourceRows = rows;
+        const cartItems = sourceRows
+            .map((row) => mapCheckoutCartItem(row))
+            .filter((row) => Boolean(row));
         if (!cartItems.length)
             return res.status(400).json({ error: 'Cart empty' });
+        if (cartItems.length !== sourceRows.length) {
+            return res.status(400).json({ error: 'Some cart items are unavailable. Please review your cart and retry.' });
+        }
         for (const it of cartItems) {
-            if (it.quantity > it.stock)
-                return res.status(400).json({ error: `Not enough stock for ${it.name}` });
+            if (it.itemType === 'product') {
+                if (it.stock === null || it.quantity > it.stock) {
+                    return res.status(400).json({ error: `Not enough stock for ${it.name}` });
+                }
+                continue;
+            }
+            if (it.requiresCustomPrice) {
+                return res.status(400).json({ error: `${it.name} requires custom pricing and cannot be checked out directly.` });
+            }
         }
         const subtotal = cartItems.reduce((sum, it) => sum + toAmount(it.unitPrice) * toAmount(it.quantity), 0);
         const shipping = 0;
@@ -88,9 +190,12 @@ const initiateCheckout = async (req, res) => {
         ]);
         const orderId = orderRes.insertId;
         for (const it of cartItems) {
-            await db_1.db.query('INSERT INTO orderItems (orderId, productId, quantity, unitPrice) VALUES (?,?,?,?)', [orderId, it.productId, it.quantity, it.unitPrice]);
-            await db_1.db.query('UPDATE products SET stock = stock - ? WHERE id = ?', [it.quantity, it.productId]);
+            await db_1.db.query('INSERT INTO orderItems (orderId, productId, packageId, itemType, quantity, unitPrice) VALUES (?,?,?,?,?,?)', [orderId, it.productId, it.packageId, it.itemType, it.quantity, it.unitPrice]);
+            if (it.itemType === 'product' && it.productId) {
+                await db_1.db.query('UPDATE products SET stock = stock - ? WHERE id = ?', [it.quantity, it.productId]);
+            }
         }
+        await syncPackageEnrollmentsForOrder({ orderId, userId, items: cartItems });
         await db_1.db.query('DELETE FROM cartItems WHERE cartId = ?', [cart.id]);
         const preference = String(providerPreference || 'AUTO').toLowerCase();
         let provider = 'flutterwave';
@@ -266,7 +371,7 @@ const getOrderById = async (req, res) => {
             return res.status(404).json({ error: 'Not found' });
         if (req.user.role !== 'admin' && order.userId !== userId)
             return res.status(403).json({ error: 'Forbidden' });
-        const [items] = await db_1.db.query('SELECT oi.*, p.name, p.images FROM orderItems oi JOIN products p ON p.id = oi.productId WHERE oi.orderId = ?', [id]);
+        const [items] = await db_1.db.query(ORDER_ITEMS_QUERY, [id]);
         const [payments] = await db_1.db.query('SELECT * FROM payments WHERE orderId = ?', [id]);
         const [installments] = await db_1.db.query('SELECT * FROM installments WHERE orderId = ?', [id]);
         res.json({ order, items, payments, installments });
@@ -301,7 +406,7 @@ const getOrderByPaymentReference = async (req, res) => {
             return res.status(403).json({ error: 'Forbidden' });
         const [orderRows] = await db_1.db.query('SELECT * FROM orders WHERE id = ?', [match.id]);
         const order = orderRows[0];
-        const [items] = await db_1.db.query('SELECT oi.*, p.name, p.images FROM orderItems oi JOIN products p ON p.id = oi.productId WHERE oi.orderId = ?', [match.id]);
+        const [items] = await db_1.db.query(ORDER_ITEMS_QUERY, [match.id]);
         const [payments] = await db_1.db.query('SELECT * FROM payments WHERE orderId = ?', [match.id]);
         const [installments] = await db_1.db.query('SELECT * FROM installments WHERE orderId = ?', [match.id]);
         res.json({ order, items, payments, installments });

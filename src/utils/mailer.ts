@@ -343,9 +343,10 @@ export const sendPaymentSuccessNotificationsByOrder = async (params: {
   if (!order?.customerEmail) return;
 
   const [itemRows] = await db.query(
-    `SELECT p.name, oi.quantity, oi.unitPrice
+    `SELECT COALESCE(p.name, pk.name) AS name, oi.quantity, oi.unitPrice
      FROM orderItems oi
-     JOIN products p ON p.id = oi.productId
+     LEFT JOIN products p ON oi.itemType = 'product' AND p.id = oi.productId
+     LEFT JOIN packages pk ON oi.itemType = 'package' AND pk.id = oi.packageId
      WHERE oi.orderId = ?`,
     [params.orderId]
   );

@@ -23,6 +23,19 @@ CREATE TABLE IF NOT EXISTS products (
   isActive BOOLEAN DEFAULT TRUE
 );
 
+CREATE TABLE IF NOT EXISTS packages (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  name VARCHAR(255) NOT NULL,
+  description TEXT,
+  price DECIMAL(10,2) DEFAULT NULL,
+  requiresCustomPrice BOOLEAN DEFAULT FALSE,
+  images JSON,
+  whatsappLink VARCHAR(1024),
+  isActive BOOLEAN DEFAULT TRUE,
+  createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updatedAt DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+);
+
 CREATE TABLE IF NOT EXISTS carts (
   id INT AUTO_INCREMENT PRIMARY KEY,
   userId INT,
@@ -33,9 +46,12 @@ CREATE TABLE IF NOT EXISTS cartItems (
   id INT AUTO_INCREMENT PRIMARY KEY,
   cartId INT,
   productId INT,
+  packageId INT DEFAULT NULL,
+  itemType ENUM('product','package') NOT NULL DEFAULT 'product',
   quantity INT,
   FOREIGN KEY (cartId) REFERENCES carts(id),
-  FOREIGN KEY (productId) REFERENCES products(id)
+  FOREIGN KEY (productId) REFERENCES products(id),
+  CONSTRAINT cart_items_package_fk FOREIGN KEY (packageId) REFERENCES packages(id)
 );
 
 CREATE TABLE IF NOT EXISTS orders (
@@ -53,10 +69,33 @@ CREATE TABLE IF NOT EXISTS orderItems (
   id INT AUTO_INCREMENT PRIMARY KEY,
   orderId INT,
   productId INT,
+  packageId INT DEFAULT NULL,
+  itemType ENUM('product','package') NOT NULL DEFAULT 'product',
   quantity INT,
   unitPrice DECIMAL(10,2),
   FOREIGN KEY (orderId) REFERENCES orders(id),
-  FOREIGN KEY (productId) REFERENCES products(id)
+  FOREIGN KEY (productId) REFERENCES products(id),
+  CONSTRAINT order_items_package_fk FOREIGN KEY (packageId) REFERENCES packages(id)
+);
+
+CREATE TABLE IF NOT EXISTS userPackageEnrollments (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  userId INT NOT NULL,
+  packageId INT NOT NULL,
+  orderId INT DEFAULT NULL,
+  status ENUM('opted_in','pending_payment','paid') NOT NULL DEFAULT 'opted_in',
+  source ENUM('custom_request','cart_checkout') NOT NULL DEFAULT 'custom_request',
+  selectedPrice DECIMAL(10,2) DEFAULT NULL,
+  notes TEXT DEFAULT NULL,
+  createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updatedAt DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  KEY user_package_enrollments_user_idx (userId),
+  KEY user_package_enrollments_package_idx (packageId),
+  KEY user_package_enrollments_order_idx (orderId),
+  KEY user_package_enrollments_status_idx (status),
+  CONSTRAINT user_package_enrollments_user_fk FOREIGN KEY (userId) REFERENCES users(id) ON DELETE CASCADE,
+  CONSTRAINT user_package_enrollments_package_fk FOREIGN KEY (packageId) REFERENCES packages(id) ON DELETE CASCADE,
+  CONSTRAINT user_package_enrollments_order_fk FOREIGN KEY (orderId) REFERENCES orders(id) ON DELETE SET NULL
 );
 
 CREATE TABLE IF NOT EXISTS payments (

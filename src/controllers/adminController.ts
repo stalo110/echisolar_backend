@@ -34,11 +34,17 @@ export const getDashboardStats = async (_req: Request, res: Response) => {
        FROM projects
        WHERE isActive = TRUE`
     );
+    const [packageRows] = await db.query(
+      `SELECT COUNT(*) AS totalPackages
+       FROM packages
+       WHERE isActive = TRUE`
+    );
 
     const orderAgg = (orderAggRows as any[])[0] || {};
     const userAgg = (userRows as any[])[0] || {};
     const productAgg = (productRows as any[])[0] || {};
     const projectAgg = (projectRows as any[])[0] || {};
+    const packageAgg = (packageRows as any[])[0] || {};
 
     return res.json({
       totalSales: toNumber(orderAgg.totalSales),
@@ -48,6 +54,7 @@ export const getDashboardStats = async (_req: Request, res: Response) => {
       users: toNumber(userAgg.totalUsers),
       products: toNumber(productAgg.totalProducts),
       projects: toNumber(projectAgg.totalProjects),
+      packages: toNumber(packageAgg.totalPackages),
     });
   } catch (error) {
     console.error(error);
@@ -194,4 +201,3 @@ export const getRevenueAnalytics = async (req: Request, res: Response) => {
     return res.status(500).json({ error: 'Failed to fetch revenue analytics' });
   }
 };
-
