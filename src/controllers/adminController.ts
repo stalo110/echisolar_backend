@@ -8,6 +8,7 @@ const parsePositiveInt = (value: unknown, fallback: number, max = 100) => {
 };
 
 const toNumber = (value: unknown) => Number(value || 0);
+const normalizeSearch = (value: unknown) => String(value || '').trim();
 
 export const getDashboardStats = async (_req: Request, res: Response) => {
   try {
@@ -66,9 +67,24 @@ export const getAdminOrders = async (req: Request, res: Response) => {
   const page = parsePositiveInt(req.query.page, 1, 10_000);
   const limit = parsePositiveInt(req.query.limit, 10, 100);
   const offset = (page - 1) * limit;
+  const search = normalizeSearch(req.query.search);
 
   try {
-    const [countRows] = await db.query('SELECT COUNT(*) AS total FROM orders');
+    const whereParts: string[] = [];
+    const whereParams: any[] = [];
+    if (search) {
+      whereParts.push('(CAST(o.id AS CHAR) LIKE ? OR LOWER(u.name) LIKE ?)');
+      whereParams.push(`%${search}%`, `%${search.toLowerCase()}%`);
+    }
+    const whereClause = whereParts.length ? `WHERE ${whereParts.join(' AND ')}` : '';
+
+    const [countRows] = await db.query(
+      `SELECT COUNT(*) AS total
+       FROM orders o
+       LEFT JOIN users u ON u.id = o.userId
+       ${whereClause}`,
+      whereParams
+    );
     const total = toNumber((countRows as any[])[0]?.total);
 
     const [rows] = await db.query(
@@ -83,9 +99,10 @@ export const getAdminOrders = async (req: Request, res: Response) => {
          u.email AS customerEmail
        FROM orders o
        LEFT JOIN users u ON u.id = o.userId
+       ${whereClause}
        ORDER BY o.placedAt DESC
        LIMIT ? OFFSET ?`,
-      [limit, offset]
+      [...whereParams, limit, offset]
     );
 
     return res.json({
@@ -100,6 +117,54 @@ export const getAdminOrders = async (req: Request, res: Response) => {
   } catch (error) {
     console.error(error);
     return res.status(500).json({ error: 'Failed to fetch admin orders' });
+  }
+};
+
+export const deleteAdminOrder = async (req: Request, res: Response) => {
+  const orderId = Number(req.params.id || 0);
+  if (!Number.isFinite(orderId) || orderId <= 0) {
+    return res.status(400).json({ error: 'Invalid order id' });
+  }
+
+  const connection = await db.getConnection();
+  try {
+    await connection.beginTransaction();
+
+    const [orderRows] = await connection.query('SELECT id FROM orders WHERE id = ? LIMIT 1', [orderId]);
+    if (!(orderRows as any[])[0]) {
+      await connection.rollback();
+      return res.status(404).json({ error: 'Order not found' });
+    }
+
+    const [itemRows] = await connection.query(
+      'SELECT itemType, productId, quantity FROM orderItems WHERE orderId = ?',
+      [orderId]
+    );
+
+    for (const item of itemRows as any[]) {
+      if (String(item.itemType || 'product') !== 'product') continue;
+      if (!item.productId) continue;
+      await connection.query('UPDATE products SET stock = stock + ? WHERE id = ?', [
+        Number(item.quantity || 0),
+        Number(item.productId),
+      ]);
+    }
+
+    await connection.query('DELETE FROM payments WHERE orderId = ?', [orderId]);
+    await connection.query('DELETE FROM installments WHERE orderId = ?', [orderId]);
+    await connection.query('DELETE FROM orderItems WHERE orderId = ?', [orderId]);
+    await connection.query('DELETE FROM gatewaySubscriptions WHERE orderId = ?', [orderId]);
+    await connection.query('DELETE FROM userPackageEnrollments WHERE orderId = ?', [orderId]);
+    await connection.query('DELETE FROM orders WHERE id = ?', [orderId]);
+
+    await connection.commit();
+    return res.json({ message: 'Order deleted' });
+  } catch (error) {
+    await connection.rollback();
+    console.error(error);
+    return res.status(500).json({ error: 'Failed to delete order' });
+  } finally {
+    connection.release();
   }
 };
 

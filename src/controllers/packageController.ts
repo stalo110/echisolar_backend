@@ -97,7 +97,7 @@ export const getPackages: RequestHandler = async (_req, res) => {
 
 export const getAdminPackages: RequestHandler = async (_req, res) => {
   try {
-    const [rows] = await db.query('SELECT * FROM packages ORDER BY createdAt DESC');
+    const [rows] = await db.query('SELECT * FROM packages WHERE isActive = TRUE ORDER BY createdAt DESC');
     res.json((rows as any[]).map(normalizePackage));
   } catch (error) {
     console.error(error);
@@ -245,29 +245,33 @@ export const deletePackage: RequestHandler = async (req, res) => {
     return res.status(400).json({ error: 'Invalid package id' });
   }
 
+  const connection = await db.getConnection();
   try {
-    const [orderRefRows] = await db.query(
-      'SELECT COUNT(*) AS total FROM orderItems WHERE packageId = ?',
-      [packageId]
-    );
-    const totalOrderRefs = Number((orderRefRows as any[])[0]?.total || 0);
-    if (totalOrderRefs > 0) {
-      return res
-        .status(409)
-        .json({ error: 'Package cannot be deleted because it is linked to existing orders.' });
-    }
+    await connection.beginTransaction();
 
-    await db.query("DELETE FROM cartItems WHERE packageId = ? AND itemType = 'package'", [packageId]);
-
-    const [result] = await db.query('DELETE FROM packages WHERE id = ?', [packageId]);
-    if (Number((result as any).affectedRows || 0) === 0) {
+    const [rows] = await connection.query('SELECT id FROM packages WHERE id = ? LIMIT 1', [packageId]);
+    if (!(rows as any[])[0]) {
+      await connection.rollback();
       return res.status(404).json({ error: 'Package not found' });
     }
 
+    await connection.query('DELETE FROM cartItems WHERE packageId = ?', [packageId]);
+    await connection.query('UPDATE orderItems SET packageId = NULL WHERE packageId = ?', [packageId]);
+
+    const [result] = await connection.query('DELETE FROM packages WHERE id = ?', [packageId]);
+    if (Number((result as any).affectedRows || 0) === 0) {
+      await connection.rollback();
+      return res.status(404).json({ error: 'Package not found' });
+    }
+
+    await connection.commit();
     res.json({ message: 'Package deleted' });
   } catch (error) {
+    await connection.rollback();
     console.error(error);
     res.status(500).json({ error: 'Server error' });
+  } finally {
+    connection.release();
   }
 };
 

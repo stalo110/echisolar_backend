@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { adminOnly, protect } from '../middlewares/authMiddleware';
 import {
+  deleteAdminOrder,
   getAdminOrders,
   getAdminUsers,
   getDashboardStats,
@@ -17,6 +18,7 @@ const r = Router();
 
 r.get('/dashboard', protect, adminOnly, getDashboardStats);
 r.get('/orders', protect, adminOnly, getAdminOrders);
+r.delete('/orders/:id', protect, adminOnly, deleteAdminOrder);
 r.get('/users', protect, adminOnly, getAdminUsers);
 r.get('/revenue', protect, adminOnly, getRevenueAnalytics);
 r.get('/messages', protect, adminOnly, getAdminMessages);

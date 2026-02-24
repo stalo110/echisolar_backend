@@ -50,10 +50,20 @@ export const getAdminMessages = async (req: Request, res: Response) => {
   const limit = Math.min(Math.max(Number(req.query.limit || 20), 1), 100);
   const offset = (page - 1) * limit;
   const status = normalizeStatus(req.query.status);
+  const search = String(req.query.search || '').trim().toLowerCase();
 
   try {
-    const whereClause = status ? 'WHERE status = ?' : '';
-    const params: any[] = status ? [status] : [];
+    const whereParts: string[] = [];
+    const params: any[] = [];
+    if (status) {
+      whereParts.push('status = ?');
+      params.push(status);
+    }
+    if (search) {
+      whereParts.push('LOWER(name) LIKE ?');
+      params.push(`%${search}%`);
+    }
+    const whereClause = whereParts.length ? `WHERE ${whereParts.join(' AND ')}` : '';
 
     const [rows] = await db.query(
       `SELECT id, name, email, subject, message, status, adminReply, replyDate, replied, createdAt, updatedAt
@@ -64,7 +74,10 @@ export const getAdminMessages = async (req: Request, res: Response) => {
       [...params, limit, offset]
     );
 
-    const [countRows] = await db.query(`SELECT COUNT(*) AS total FROM contactMessages ${whereClause}`, params);
+    const [countRows] = await db.query(
+      `SELECT COUNT(*) AS total FROM contactMessages ${whereClause}`,
+      params
+    );
     const total = Number((countRows as any[])[0]?.total || 0);
     const totalPages = Math.max(Math.ceil(total / limit), 1);
 
