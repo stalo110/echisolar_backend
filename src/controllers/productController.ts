@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import { db } from '../config/db';
+import { PRODUCT_CATEGORY_HINT, resolveProductCategoryId } from '../config/productCategories';
 import { buildCloudinaryId, uploadBufferToCloudinary } from '../utils/cloudinary';
 import { isMulterFileArray } from '../utils/guards';
 
@@ -35,6 +36,8 @@ const parseImages = (value: unknown): string[] => {
 const containsDataUrl = (images: string[]) =>
   images.some((image) => /^data:image\//i.test(image.trim()));
 
+const INVALID_CATEGORY_ERROR = `Invalid category. Allowed values: ${PRODUCT_CATEGORY_HINT}.`;
+
 const getUploadedImageUrls = async (req: any) => {
   const uploadedUrls: string[] = [];
   if (!isMulterFileArray(req.files)) return uploadedUrls;
@@ -54,8 +57,12 @@ export const getProducts = async (req: Request, res: Response) => {
   const params: any[] = [];
 
   if (category) {
+    const categoryId = resolveProductCategoryId(category);
+    if (categoryId === null) {
+      return res.status(400).json({ error: INVALID_CATEGORY_ERROR });
+    }
     query += ' AND categoryId = ?';
-    params.push(category);
+    params.push(categoryId);
   }
   if (search) {
     query += ' AND name LIKE ?';
@@ -99,6 +106,15 @@ export const getProductById = async (req: Request, res: Response) => {
 export const createProduct = async (req: any, res: Response) => {
   try {
     const { name, description, price, stock, categoryId, images: imagesBody, isLatestArrival } = req.body;
+    const hasCategoryInput =
+      typeof categoryId !== 'undefined' &&
+      categoryId !== null &&
+      !(typeof categoryId === 'string' && !categoryId.trim());
+    const resolvedCategoryId = hasCategoryInput ? resolveProductCategoryId(categoryId) : null;
+    if (hasCategoryInput && resolvedCategoryId === null) {
+      return res.status(400).json({ error: INVALID_CATEGORY_ERROR });
+    }
+
     const uploadedUrls = await getUploadedImageUrls(req);
     const imagesToStore = uploadedUrls.length ? uploadedUrls : parseImages(imagesBody);
     if (containsDataUrl(imagesToStore)) {
@@ -115,7 +131,7 @@ export const createProduct = async (req: any, res: Response) => {
         description || null,
         Number(price || 0),
         Number(stock || 0),
-        categoryId ? Number(categoryId) : null,
+        resolvedCategoryId,
         JSON.stringify(imagesToStore),
         toBoolean(isLatestArrival),
       ]
@@ -146,6 +162,19 @@ export const updateProduct = async (req: any, res: Response) => {
       isActive,
     } = req.body;
 
+    let categoryIdToStore = existing.categoryId ?? null;
+    if (typeof categoryId !== 'undefined') {
+      if (categoryId === null || (typeof categoryId === 'string' && !categoryId.trim())) {
+        categoryIdToStore = null;
+      } else {
+        const resolvedCategoryId = resolveProductCategoryId(categoryId);
+        if (resolvedCategoryId === null) {
+          return res.status(400).json({ error: INVALID_CATEGORY_ERROR });
+        }
+        categoryIdToStore = resolvedCategoryId;
+      }
+    }
+
     const uploadedUrls = await getUploadedImageUrls(req);
     const imagesToStore = uploadedUrls.length
       ? uploadedUrls
@@ -167,7 +196,7 @@ export const updateProduct = async (req: any, res: Response) => {
         typeof description === 'undefined' ? existing.description : description,
         typeof price === 'undefined' ? Number(existing.price || 0) : Number(price || 0),
         typeof stock === 'undefined' ? Number(existing.stock || 0) : Number(stock || 0),
-        typeof categoryId === 'undefined' ? existing.categoryId : Number(categoryId || 0),
+        categoryIdToStore,
         JSON.stringify(imagesToStore),
         typeof isLatestArrival === 'undefined' ? toBoolean(existing.isLatestArrival) : toBoolean(isLatestArrival),
         typeof isActive === 'undefined' ? toBoolean(existing.isActive, true) : toBoolean(isActive, true),

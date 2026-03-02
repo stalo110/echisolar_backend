@@ -2,6 +2,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.deleteProduct = exports.updateProduct = exports.createProduct = exports.getProductById = exports.getAdminProducts = exports.getProducts = void 0;
 const db_1 = require("../config/db");
+const productCategories_1 = require("../config/productCategories");
 const cloudinary_1 = require("../utils/cloudinary");
 const guards_1 = require("../utils/guards");
 const toBoolean = (value, fallback = false) => {
@@ -36,6 +37,7 @@ const parseImages = (value) => {
     }
 };
 const containsDataUrl = (images) => images.some((image) => /^data:image\//i.test(image.trim()));
+const INVALID_CATEGORY_ERROR = `Invalid category. Allowed values: ${productCategories_1.PRODUCT_CATEGORY_HINT}.`;
 const getUploadedImageUrls = async (req) => {
     const uploadedUrls = [];
     if (!(0, guards_1.isMulterFileArray)(req.files))
@@ -52,8 +54,12 @@ const getProducts = async (req, res) => {
     let query = 'SELECT * FROM products WHERE isActive = TRUE';
     const params = [];
     if (category) {
+        const categoryId = (0, productCategories_1.resolveProductCategoryId)(category);
+        if (categoryId === null) {
+            return res.status(400).json({ error: INVALID_CATEGORY_ERROR });
+        }
         query += ' AND categoryId = ?';
-        params.push(category);
+        params.push(categoryId);
     }
     if (search) {
         query += ' AND name LIKE ?';
@@ -98,6 +104,13 @@ exports.getProductById = getProductById;
 const createProduct = async (req, res) => {
     try {
         const { name, description, price, stock, categoryId, images: imagesBody, isLatestArrival } = req.body;
+        const hasCategoryInput = typeof categoryId !== 'undefined' &&
+            categoryId !== null &&
+            !(typeof categoryId === 'string' && !categoryId.trim());
+        const resolvedCategoryId = hasCategoryInput ? (0, productCategories_1.resolveProductCategoryId)(categoryId) : null;
+        if (hasCategoryInput && resolvedCategoryId === null) {
+            return res.status(400).json({ error: INVALID_CATEGORY_ERROR });
+        }
         const uploadedUrls = await getUploadedImageUrls(req);
         const imagesToStore = uploadedUrls.length ? uploadedUrls : parseImages(imagesBody);
         if (containsDataUrl(imagesToStore)) {
@@ -111,7 +124,7 @@ const createProduct = async (req, res) => {
             description || null,
             Number(price || 0),
             Number(stock || 0),
-            categoryId ? Number(categoryId) : null,
+            resolvedCategoryId,
             JSON.stringify(imagesToStore),
             toBoolean(isLatestArrival),
         ]);
@@ -131,6 +144,19 @@ const updateProduct = async (req, res) => {
         if (!existing)
             return res.status(404).json({ error: 'Product not found' });
         const { name, description, price, stock, categoryId, images: imagesBody, isLatestArrival, isActive, } = req.body;
+        let categoryIdToStore = existing.categoryId ?? null;
+        if (typeof categoryId !== 'undefined') {
+            if (categoryId === null || (typeof categoryId === 'string' && !categoryId.trim())) {
+                categoryIdToStore = null;
+            }
+            else {
+                const resolvedCategoryId = (0, productCategories_1.resolveProductCategoryId)(categoryId);
+                if (resolvedCategoryId === null) {
+                    return res.status(400).json({ error: INVALID_CATEGORY_ERROR });
+                }
+                categoryIdToStore = resolvedCategoryId;
+            }
+        }
         const uploadedUrls = await getUploadedImageUrls(req);
         const imagesToStore = uploadedUrls.length
             ? uploadedUrls
@@ -149,7 +175,7 @@ const updateProduct = async (req, res) => {
             typeof description === 'undefined' ? existing.description : description,
             typeof price === 'undefined' ? Number(existing.price || 0) : Number(price || 0),
             typeof stock === 'undefined' ? Number(existing.stock || 0) : Number(stock || 0),
-            typeof categoryId === 'undefined' ? existing.categoryId : Number(categoryId || 0),
+            categoryIdToStore,
             JSON.stringify(imagesToStore),
             typeof isLatestArrival === 'undefined' ? toBoolean(existing.isLatestArrival) : toBoolean(isLatestArrival),
             typeof isActive === 'undefined' ? toBoolean(existing.isActive, true) : toBoolean(isActive, true),
