@@ -3,8 +3,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.logPayment = logPayment;
-exports.logWebhook = logWebhook;
+exports.logWebhook = exports.logPayment = void 0;
 const fs_1 = __importDefault(require("fs"));
 const path_1 = __importDefault(require("path"));
 const logDir = path_1.default.join(process.cwd(), 'storage', 'logs');
@@ -40,8 +39,10 @@ function writeLog(filePath, payload) {
 function logPayment(event, payload) {
     writeLog(paymentsLog, { event, ...payload });
 }
+exports.logPayment = logPayment;
 function logWebhook(event, payload) {
     const maskedPayload = maskSensitive(payload);
     writeLog(webhooksLog, { event, ...maskedPayload });
 }
+exports.logWebhook = logWebhook;
 //# sourceMappingURL=paymentLogger.js.map

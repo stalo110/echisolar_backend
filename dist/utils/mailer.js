@@ -3,8 +3,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.sendContactReplyEmail = exports.sendPaymentSuccessNotificationsByOrder = exports.sendPaymentSuccessNotifications = exports.sendWelcomeEmail = exports.hasPaymentConfirmationEmailLog = void 0;
-exports.notifyOrderStakeholders = notifyOrderStakeholders;
+exports.sendContactReplyEmail = exports.sendPaymentSuccessNotificationsByOrder = exports.sendPaymentSuccessNotifications = exports.sendPasswordResetEmail = exports.sendWelcomeEmail = exports.notifyOrderStakeholders = exports.hasPaymentConfirmationEmailLog = void 0;
 const nodemailer_1 = __importDefault(require("nodemailer"));
 const dotenv_1 = __importDefault(require("dotenv"));
 const db_1 = require("../config/db");
@@ -171,6 +170,7 @@ async function notifyOrderStakeholders(options) {
         });
     }
 }
+exports.notifyOrderStakeholders = notifyOrderStakeholders;
 const sendWelcomeEmail = async (params) => {
     const name = String(params.name || '').trim() || 'there';
     const email = String(params.email || '').trim();
@@ -194,6 +194,41 @@ const sendWelcomeEmail = async (params) => {
     });
 };
 exports.sendWelcomeEmail = sendWelcomeEmail;
+const sendPasswordResetEmail = async (params) => {
+    const name = String(params.name || '').trim() || 'there';
+    const email = String(params.email || '').trim();
+    const resetUrl = String(params.resetUrl || '').trim();
+    const expiresInMinutes = Number(params.expiresInMinutes || 0);
+    if (!email || !resetUrl)
+        return { ok: false, skipped: true };
+    const safeExpiry = Number.isFinite(expiresInMinutes) && expiresInMinutes > 0 ? expiresInMinutes : 30;
+    const subject = 'Reset your EchiSolar password';
+    const html = `
+    <div style="font-family: Arial, sans-serif; line-height: 1.6;">
+      <h2>Password reset request</h2>
+      <p>Hello ${name},</p>
+      <p>We received a request to reset your EchiSolar account password.</p>
+      <p>
+        <a href="${resetUrl}" style="display:inline-block;padding:10px 16px;background:#2E7D4D;color:#fff;text-decoration:none;border-radius:4px;">
+          Reset Password
+        </a>
+      </p>
+      <p>This link expires in ${safeExpiry} minutes.</p>
+      <p>If you did not request this, you can ignore this email.</p>
+    </div>
+  `;
+    return sendEmail({
+        type: 'password_reset',
+        to: email,
+        subject,
+        html,
+        context: {
+            expiresInMinutes: safeExpiry,
+            resetUrl,
+        },
+    });
+};
+exports.sendPasswordResetEmail = sendPasswordResetEmail;
 const sendPaymentSuccessNotifications = async (input) => {
     const subject = `Payment confirmed for Order #${input.orderId}`;
     const itemRows = input.items

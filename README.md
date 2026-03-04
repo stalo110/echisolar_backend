@@ -45,6 +45,7 @@ Express + TypeScript API for the EchiSolar React storefront. It manages MySQL da
 | `ADMIN_NOTIFICATION_EMAIL` | Optional recipient for admin payment alerts. |
 | `CLOUDINARY_*` | Cloudinary credentials used when uploading product images. |
 | `FRONTEND_URL` | Allowed CORS origin + callback base URL for Paystack and Flutterwave. |
+| `PASSWORD_RESET_TOKEN_TTL_MINUTES` | Password reset token lifetime (default `30`). |
 
 ## API snapshot (Postman-ready)
 
@@ -54,6 +55,8 @@ A simple Postman collection is documented in `docs/postman_collection.md`. Highl
 | --- | --- | --- |
 | `POST /api/auth/register` | Register, returns JWT + user object |
 | `POST /api/auth/login` | Login (email/password), same payload as register |
+| `POST /api/auth/forgot-password` | Accepts `{ email }`, sends reset link if account exists |
+| `POST /api/auth/reset-password` | Accepts `{ token, password, confirmPassword? }` |
 | `GET /api/products` | Accepts `category`, `search`, `isLatestArrival` query params |
 | `POST /api/products` | Protected: `multipart/form-data` + Cloudinary upload |
 | `GET /api/cart` | Requires JWT, returns cart items |
@@ -96,6 +99,7 @@ These credentials unlock the admin dashboard (`/admin/...`) and the standard cus
 - Flutterwave expects the raw body for signature verification (the middleware in `app.ts` preserves it).
 - A checkout email is sent to the customer (and admin email if configured) with the payment link for Flutterwave/Paystack.
 - Welcome emails are triggered on successful registration.
+- Password reset links are emailed for `/api/auth/forgot-password` requests.
 - Successful payment confirmation sends customer + admin notifications with order summary and delivery address.
 - Contact form replies from admins are sent by email and logged.
 - Email attempts are written to `email_logs` with statuses (`sent`, `failed`, `skipped`).

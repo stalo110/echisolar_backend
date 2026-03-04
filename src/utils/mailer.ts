@@ -244,6 +244,48 @@ export const sendWelcomeEmail = async (params: { name: string; email: string }) 
   });
 };
 
+export const sendPasswordResetEmail = async (params: {
+  name?: string | null;
+  email: string;
+  resetUrl: string;
+  expiresInMinutes: number;
+}) => {
+  const name = String(params.name || '').trim() || 'there';
+  const email = String(params.email || '').trim();
+  const resetUrl = String(params.resetUrl || '').trim();
+  const expiresInMinutes = Number(params.expiresInMinutes || 0);
+
+  if (!email || !resetUrl) return { ok: false as const, skipped: true as const };
+
+  const safeExpiry = Number.isFinite(expiresInMinutes) && expiresInMinutes > 0 ? expiresInMinutes : 30;
+  const subject = 'Reset your EchiSolar password';
+  const html = `
+    <div style="font-family: Arial, sans-serif; line-height: 1.6;">
+      <h2>Password reset request</h2>
+      <p>Hello ${name},</p>
+      <p>We received a request to reset your EchiSolar account password.</p>
+      <p>
+        <a href="${resetUrl}" style="display:inline-block;padding:10px 16px;background:#2E7D4D;color:#fff;text-decoration:none;border-radius:4px;">
+          Reset Password
+        </a>
+      </p>
+      <p>This link expires in ${safeExpiry} minutes.</p>
+      <p>If you did not request this, you can ignore this email.</p>
+    </div>
+  `;
+
+  return sendEmail({
+    type: 'password_reset',
+    to: email,
+    subject,
+    html,
+    context: {
+      expiresInMinutes: safeExpiry,
+      resetUrl,
+    },
+  });
+};
+
 export type PaymentSuccessNotificationInput = {
   orderId: number;
   provider: string;
